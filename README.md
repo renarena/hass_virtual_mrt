@@ -1,11 +1,17 @@
 # 🌡️ Virtual Thermal Comfort (MRT & Operative Temperature)
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=baudneo&repository=hass_virtual_mrt&category=integration)
+
 ## 🙏Thanks
 I ported this logic from a blueprint that @Ecronika [shared in the Home Assistant Community Forums](https://community.home-assistant.io/t/blueprint-virtual-mrt-v0-1-10-mean-radiant-temperature-operative-temperature/945267/3)
+
+---
 
 ## 📝 Note
 There is already a custom integration named ['Thermal Comfort' ](https://github.com/dolezsa/thermal_comfort) that uses air temp and relative humidity to expose some perception sensors alongside dew point, frost point and heat index/humidex.
 This integration is different in that it focuses on **Mean Radiant Temperature (MRT)** and **Operative Temperature ($T_{op}$)**, which are more advanced concepts from building science that better represent how humans perceive temperature in a space.
+
+---
 
 ## 🏡 Introduction: What This Integration Does
 
@@ -24,12 +30,6 @@ This is achieved by computing the **Mean Radiant Temperature (MRT)**, which trac
 |:------------------------------|:-----------------------------------------------------------------------------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Mean Radiant Temp (MRT)**   | The effective temperature of the room's surfaces (walls, windows, floor, ceiling). | Essential for **monitoring radiant systems** (floor heating/cooling). It allows you to see the thermal lag of your home's structure.                                                                      |
 | **Operative Temp ($T_{op}$)** | The average of the Air Temperature and the MRT ($\frac{T_{air} + \text{MRT}}{2}$). | **The ultimate trigger for HVAC automation.** Use $T_{op}$ instead of $T_{air}$ to ensure your heating/cooling system only runs when a person *feels* uncomfortable, saving energy and improving comfort. |
-
----
-
-## ⚙️ Installation and Setup
-
-**(Typically HACS/Manual steps.)**
 
 ---
 
@@ -96,11 +96,10 @@ The integration uses the following fields from your selected entities:
 > sensors provide the most accurate measurement of solar radiation impacting your home.
 > If no sensor is supplied, the integration will intelligently estimate irradiance 
 > using weather data, but cap it at `1000 W/m²`.
-***
 
-#### Virtual Global Solar Irradiance Sensor
-I dont have a physical one, so instead, I created a virtual sensor using the HASS built-in 
-[Forcast.Solar](https://www.home-assistant.io/integrations/forecast_solar) integration. YOU MUST use `1000` as your 
+#### Virtual Global Solar Radiation Sensor
+I don't have a physical one, so instead, I created a virtual sensor using the HASS built-in 
+[Forcast.Solar](https://www.home-assistant.io/integrations/forecast_solar) integration. **YOU MUST** use `1000` as your 
 `total watt peak power` and `0` as your `declination angle` to get correct W/m² output for Global Horizontal 
 Irradiation (GHI), I left the default `azimuth` of `180`.
 
@@ -120,6 +119,8 @@ without interruption.
 | **Outdoor Temperature**     | 1. Dedicated `temperature` sensor (if provided). 2. `weather` entity attribute (`temperature`). | If all sensors are missing, a default value (e.g., 10°C) is used as a final last resort.                                                                                                                              |
 | **Solar Irradiance** (W/m²) | 1. Dedicated **Global Solar Radiation Sensor**.                                                 | If a dedicated sensor is missing or unavailable, a **heuristic model** is used: $$\text{Irradiance} \approx \text{UV} \times \text{Cloud Cover Penalty} \times \text{Rain Multiplier} \times \text{Daylight Factor}$$ |
 | **Cloud/UV Data**           | 1. Dedicated `cloud` or `UV` sensor. 2. `weather` entity attributes.                            | If attributes are missing, the `weather` entity's current **condition string** (e.g., "sunny," "cloudy," "fog") is used to guess the coverage (e.g., "sunny" $\approx 0\%$ cloud cover).                              |
+
+---
 
 ## 🧠 Advanced Section: The Calculation Flow
 
