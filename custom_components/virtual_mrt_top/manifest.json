@@ -3,6 +3,7 @@
     "name": "Virtual MRT / T_op",
     "version": "0.1.0",
     "documentation": "https://github.com/baudneo/hass_virtual_mrt",
+    "issue_tracker": "https://github.com/baudneo/hass_virtual_mrt/issues",
     "dependencies": [],
     "codeowners": ["@baudneo", "@Ecronika"],
     "requirements": [],
