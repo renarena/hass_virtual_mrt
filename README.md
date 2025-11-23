@@ -8,7 +8,7 @@ View an example config flow with screenshots in the [docs/setup.md](./docs/setup
 ---
 
 ## 🙏Thanks
-I ported this logic from a blueprint that @Ecronika [shared in the Home Assistant Community Forums](https://community.home-assistant.io/t/blueprint-virtual-mrt-v0-1-10-mean-radiant-temperature-operative-temperature/945267/3)
+I ported this logic from a blueprint that [@Ecronika](https://github.com/Ecronika) [shared in the Home Assistant Community Forums](https://community.home-assistant.io/t/blueprint-virtual-mrt-v0-1-10-mean-radiant-temperature-operative-temperature/945267/3)
 
 ---
 
