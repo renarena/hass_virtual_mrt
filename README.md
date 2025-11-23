@@ -2,6 +2,11 @@
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=baudneo&repository=hass_virtual_mrt&category=integration)
 
+## 🖼 ️Example Config Flow
+View an example config flow with screenshots in the [docs/setup.md](./docs/setup.md) file.
+
+---
+
 ## 🙏Thanks
 I ported this logic from a blueprint that @Ecronika [shared in the Home Assistant Community Forums](https://community.home-assistant.io/t/blueprint-virtual-mrt-v0-1-10-mean-radiant-temperature-operative-temperature/945267/3)
 
