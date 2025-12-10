@@ -1,6 +1,7 @@
 """Config flow for Virtual MRT integration."""
 
 from __future__ import annotations
+
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_NAME, Platform
@@ -17,7 +18,9 @@ from .const import (
     CONF_AIR_TEMP_SOURCE,
     CONF_WEATHER_ENTITY,
     CONF_SOLAR_SENSOR,
-    # --- NEW CONVECTIVE INPUTS ---
+    CONF_OUTDOOR_TEMP_SENSOR,
+    CONF_OUTDOOR_HUMIDITY_SENSOR,
+    CONF_WIND_SPEED_SENSOR,
     CONF_CLIMATE_ENTITY,
     CONF_WINDOW_STATE_SENSOR,
     CONF_DOOR_STATE_SENSOR,
@@ -29,6 +32,7 @@ from .const import (
     CONF_RH_SENSOR,
     CONF_WALL_SURFACE_SENSOR,
     DEFAULT_AIR_SPEED_STILL,
+    CONF_PRESSURE_SENSOR,
 )
 
 
@@ -141,7 +145,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
+        pass
 
     async def async_step_init(self, user_input=None):
         """Manage the options."""
@@ -182,6 +186,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         is_radiant = _get_data("is_radiant_heating", CONF_IS_RADIANT, False)
         wall_sensor = _get_data("wall_surface_sensor", CONF_WALL_SURFACE_SENSOR)
+        out_hum = _get_data("outdoor_humidity_sensor", CONF_OUTDOOR_HUMIDITY_SENSOR)
+        out_temp = _get_data("outdoor_temp_sensor", CONF_OUTDOOR_TEMP_SENSOR)
+        wind = _get_data("wind_speed_sensor", CONF_WIND_SPEED_SENSOR)
+        pressure = _get_data("pressure_sensor", CONF_PRESSURE_SENSOR)
 
         schema = {
             # Required fields
