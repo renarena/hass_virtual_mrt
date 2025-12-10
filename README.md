@@ -53,6 +53,17 @@ The calculation relies on **four primary configurable inputs** (number entities)
 | **Insulation Loss Factor** ($k_{\text{loss}}$) | **Heat Leakage / U-Value.** How poorly insulated your walls and windows are, influencing heat loss in winter. (Higher value = worse insulation).          | $0.05 - 0.30$ | **0.10:** Modern, well-insulated home. **0.25:** Old, uninsulated walls.                  |
 | **Solar Gain Factor** ($k_{\text{solar}}$)     | **Solar Heating Power.** How much solar energy actually passes through your windows to heat the room (often called SHGC).                                 | $0.0 - 2.0$   | **0.8:** Standard clear glass. **1.5:** Tilted skylight/very large clear windows.         |
 
+#### ($k_{\text{loss}}$) : Insulation Loss Factor Guidance
+
+| Wall Quality    | Approximate R-Value     | Recommended kloss | expected drop at −30∘C                       |
+|-----------------|-------------------------|-------------------|----------------------------------------------|
+| Super Insulated | R-40+ (Passive House)   | 0.03 - 0.05       | Wall stays warm        ($19^\circ\text{C}$)  |
+| Modern Standard | R-20 (2x6 construction) | 0.05 - 0.08       | Wall is cool            ($17^\circ\text{C}$) |
+| Older Insulated | R-12 (2x4, 1980s-90s)   | 0.10 - 0.15       | Wall is cold            ($15^\circ\text{C}$) | 
+| Poor / Settled  | R-8 (1950s, gaps)       | 0.15 - 0.20       | Wall is very cold       ($12^\circ\text{C}$) | 
+| Uninsulated     | R-4 (Solid Brick/Block) | 0.25 - 0.35       | Wall is freezing        ($8^\circ\text{C}$)  |
+-----------------------------------------------------------------------------------
+
 ### 2. Thermal Smoothing Factor ($\alpha$)
 
 This input is critical for accurately modeling the room's **thermal inertia** (thermal mass).
