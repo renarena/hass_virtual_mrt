@@ -378,7 +378,34 @@ class VirtualMRTSensor(SensorEntity):
 
         return max(potential_speeds)
 
-    def _calculate_local_apparent_temp(
+    def _calculate_local_apparent_temp(self, t_out: float, wind_ms: float) -> float | None:
+        """
+        Calculates Apparent Temperature (AAT) using local sensors.
+        Formula covers both Wind Chill and Humidity effects.
+        AT = Ta + 0.33*e - 0.70*ws - 4.00
+        """
+        # 1. Get Outdoor Humidity (Local > Weather > Fail)
+        rh_out = self._get_float(self.entity_outdoor_hum, None)
+        if rh_out is None:
+            w_state = self.hass.states.get(self.entity_weather)
+            if w_state:
+                rh_out = w_state.attributes.get("humidity")
+
+        if rh_out is None:
+            return None  # Cannot calculate without humidity
+
+        # 2. Calculate Vapor Pressure (hPa)
+        # Use the static helper from Psychrometrics
+        vp_sat = Psychrometrics.calculate_vapor_pressure(t_out)
+        vp_actual = vp_sat * (rh_out / 100.0)
+
+        # 3. Apply AAT Formula
+        # Note: wind_ms is raw here; in strict meteorology it's avg'd, but raw is fine.
+        app_temp = t_out + (0.33 * vp_actual) - (0.70 * wind_ms) - 4.00
+
+        return app_temp
+
+    def _calculate_local_apparent_temp_OLD(
         self, t_out: float, wind_ms: float
     ) -> float | None:
         """
@@ -546,7 +573,7 @@ class VirtualMRTSensor(SensorEntity):
         # We want the "Feels Like" temp because that drives heat loss better than dry bulb.
         # Try to calculate locally first (Most Accurate)
         t_app = self._calculate_local_apparent_temp(t_out, wind_speed_ms)
-        t_out_source = "calculated_local"
+        t_out_source = "calculated_local_aat"
 
         if t_app is None:
             # Fallback to weather entity attribute
@@ -559,7 +586,7 @@ class VirtualMRTSensor(SensorEntity):
             t_out_eff = t_app
         else:
             t_out_eff = t_out
-            t_out_source = "dry_bulb"
+            t_out_source = "dry_bulb_clamped"
 
 
         self._attributes["t_out_eff"] = round(t_out_eff, 2)
