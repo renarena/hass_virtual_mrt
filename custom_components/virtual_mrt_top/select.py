@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import logging
+from typing import List
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
@@ -30,6 +31,7 @@ from .const import (
     CONF_MANUAL_AIR_SPEED,
     CONF_RADIANT_TYPE,
     RADIANT_TYPES,
+    CONF_IS_RADIANT,
 )
 from .device_info import get_device_info
 
@@ -45,13 +47,11 @@ async def async_setup_entry(
     device_info = await get_device_info({(DOMAIN, entry.entry_id)}, config[CONF_NAME])
     store_key = f"{STORAGE_KEY}_{entry.entry_id}"
     store = Store(hass, STORAGE_VERSION, store_key)
+    entities: List[VirtualProfileSelect | VirtualRadiantTypeSelect] = [VirtualProfileSelect(hass, entry, device_info, store)]
+    if config.get(CONF_IS_RADIANT, False):
+        entities.append(VirtualRadiantTypeSelect(hass, entry, device_info))
+    async_add_entities(entities)
 
-    async_add_entities(
-        [
-            VirtualProfileSelect(hass, entry, device_info, store),
-            VirtualRadiantTypeSelect(hass, entry, device_info),
-        ]
-    )
 
 
 # --- NEW CLASS ADDED: VirtualRadiantTypeSelect ---

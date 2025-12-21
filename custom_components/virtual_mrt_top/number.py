@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import List, Collection, Iterable
+
 from homeassistant.components.number import (
     NumberMode,
     RestoreNumber,
@@ -12,6 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import EntityCategory
 
+from . import CONF_IS_RADIANT
 from .const import (
     DOMAIN,
     CONF_ROOM_PROFILE,
@@ -34,7 +37,7 @@ async def async_setup_entry(
     profile_key = config[CONF_ROOM_PROFILE]
     defaults = ROOM_PROFILES[profile_key]["data"]  # [f_out, f_win, k_loss, k_solar]
     device_info = await get_device_info({(DOMAIN, entry.entry_id)}, config[CONF_NAME])
-    entities = [
+    entities: List[VirtualNumber | VirtualFactorNumber | VirtualThermalAlphaNumber | VirtualSurfaceTargetTempNumber | VirtualAirSpeedNumber] = [
         VirtualFactorNumber(
             entry,
             device_info,
@@ -84,15 +87,6 @@ async def async_setup_entry(
         VirtualAirSpeedNumber(
             entry, device_info, CONF_HVAC_AIR_SPEED, "hvac_air_speed", 0.4, 0.0, 2.0
         ),
-        VirtualSurfaceTargetTempNumber(
-            entry,
-            device_info,
-            CONF_RADIANT_SURFACE_TEMP,
-            "radiant_surface_temp",
-            26.0,
-            0.0,
-            85.0,
-        ),
         VirtualNumber(
             entry, device_info,
             CONF_CLOTHING_INSULATION, "clothing", "mdi:hanger",
@@ -104,7 +98,18 @@ async def async_setup_entry(
             1.1, 0.8, 4.0, 0.1, "met"
         )
     ]
-
+    if config.get(CONF_IS_RADIANT, False):
+        entities.append(
+            VirtualSurfaceTargetTempNumber(
+                entry,
+                device_info,
+                CONF_RADIANT_SURFACE_TEMP,
+                "radiant_surface_temp",
+                26.0,
+                0.0,
+                85.0,
+            )
+        ),
     async_add_entities(entities)
 
 
