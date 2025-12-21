@@ -118,16 +118,16 @@ If you have in-floor heating or radiators, the logic adapts.
 
 The MRT calculation is reactive, meaning it constantly adjusts based on real-time weather conditions. For this, it pulls data from the **Weather Entity**, **`sun.sun`** and the optional **Global Solar Radiation Sensor**.
 
-| Data Point                       | Source                                                       | Use in Calculation                                                                                                                                                             |
-|:---------------------------------|:-------------------------------------------------------------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Outdoor Air Temp ($T_{out}$)** | `weather` entity attribute (`temperature`)                   | Calculates the **Heat Loss Term** (how much heat escapes through the walls).                                                                                                   |
-| **Apparent Temperature**         | `weather` entity attribute (`apparent_temperature`)          | Used to determine effective heat loss. If Apparent Temp is **lower** than $T_{out}$ (due to **wind chill**), the lower value is used for a more accurate loss calculation. 🌬️ |
-| **Wind Speed / Wind Gust**       | `weather` entity attribute (`wind_speed`, `wind_gust_speed`) | Calculates the **Wind Effect Factor** (convective loss). Higher wind speed increases the heat loss from the exterior envelope.                                                 |
-| **Cloud Coverage / UV Index**    | `weather` entity attributes or dedicated `sensor`            | Used to estimate **Global Solar Radiation** (Solar Gain).                                                                                                                      |
-| **Precipitation / Condition**    | `weather` entity state (`rainy`, `snowy`, etc.)              | Used to apply a **Rain Multiplier** (penalty) to the solar gain, simulating dark, wet conditions that reduce radiation transmission.                                           |
-| **Sun Elevation**                | Home Assistant's `sun.sun` entity                            | Determines the **Daylight Factor**, used as a multiplier for solar gain when the sun is below the horizon.                                                                     |
-| **Sun Azimuth**                  | Home Assistant's `sun.sun` entity                            | Calculates the **Solar Angle of Incidence Factor**, used to determine how the sun is hitting the window                                                                        |
-| **Global Solar Radiation**       | Optional dedicated `sensor` (e.g., `sensor.solar_radiation`) | **Preferred source** for solar gain calculation. Bypasses all weather heuristics if available (will log a warning on values > `1300 W/m²`, but will still use it).             |
+| Data Point                       | Source                                                        | Use in Calculation                                                                                                                                                             |
+|:---------------------------------|:--------------------------------------------------------------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Outdoor Air Temp ($T_{out}$)** | dedicated sensor / `weather` entity attribute (`temperature`) | Calculates the **Heat Loss Term** (how much heat escapes through the walls).                                                                                                   |
+| **Apparent Temperature**         | `weather` entity attribute (`apparent_temperature`)           | Used to determine effective heat loss. If Apparent Temp is **lower** than $T_{out}$ (due to **wind chill**), the lower value is used for a more accurate loss calculation. 🌬️ |
+| **Wind Speed / Wind Gust**       | dedicated sensor / `weather` entity attribute (`wind_speed`, `wind_gust_speed`)  | Calculates the **Wind Effect Factor** (convective loss). Higher wind speed increases the heat loss from the exterior envelope.                                                 |
+| **Cloud Coverage / UV Index**    | `weather` entity attributes or dedicated `sensor`             | Used to estimate **Global Solar Radiation** (Solar Gain).                                                                                                                      |
+| **Precipitation / Condition**    | `weather` entity state (`rainy`, `snowy`, etc.)               | Used to apply a **Rain Multiplier** (penalty) to the solar gain, simulating dark, wet conditions that reduce radiation transmission.                                           |
+| **Sun Elevation**                | Home Assistant's `sun.sun` entity                             | Determines the **Daylight Factor**, used as a multiplier for solar gain when the sun is below the horizon.                                                                     |
+| **Sun Azimuth**                  | Home Assistant's `sun.sun` entity                             | Calculates the **Solar Angle of Incidence Factor**, used to determine how the sun is hitting the window                                                                        |
+| **Global Solar Radiation**       | Optional dedicated `sensor` (e.g., `sensor.solar_radiation`)  | **Preferred source** for solar gain calculation. Bypasses all weather heuristics if available (will log a warning on values > `1300 W/m²`, but will still use it).             |
 
 >[!NOTE]
 > For best results, use a **physical Total Solar Radiation Sensor** (W/m²). These
@@ -206,8 +206,8 @@ The **Virtual Mold Risk Sensor** uses your specific room parameters to calculate
 #### How it works
 It combines four data points to model the microclimate at your wall's surface:
 1.  **Indoor Air & Humidity:** ($T_{air}$, $RH$)
-2.  **Outdoor Temperature:** ($T_{out}$ from Weather Entity)
-3.  **Insulation Quality:** ($k_{loss}$ from your Configured Profile)
+2.  **Outdoor Temperature:** ($T_{out}$ from an optional dedicated sensor or weather entity)
+3.  **Insulation Quality:** ($k_{loss}$ from your configured profile)
 
 Using the **Insulation Loss Factor** ($k_{loss}$), the integration estimates how much colder your wall surface is compared to the room air. For example, if it is $-20^{\circ}\text{C}$ outside and your insulation is poor, your wall surface might be only $12^{\circ}\text{C}$ even if the room is $21^{\circ}\text{C}$.
 
@@ -220,7 +220,9 @@ The sensor reports the **Surface Relative Humidity** and assigns a risk level ic
 | **65% - 80%** | **Warning**  | ⚠️   | **Pre-conditions for mold.** The surface is damp enough for spores to settle. You should lower indoor humidity or improve air circulation.     |
 | **> 80%**     | **CRITICAL** | ☣️   | **Active Growth Potential.** Conditions are perfect for mold germination on your walls. Immediate ventilation or dehumidification is required. |
 
+>[!NOTE]
 > **Why this matters:** In winter, a room at 45% RH might feel dry to you, but if your walls are cold, that same air can cause 90% RH at the wall surface, leading to hidden mold growth behind furniture. This sensor detects that invisible risk.
+
 ---
 ## 🔌 KNX Integration
 

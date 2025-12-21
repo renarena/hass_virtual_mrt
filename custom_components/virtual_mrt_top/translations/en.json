@@ -18,7 +18,7 @@
           "manual_air_speed": "Manual Air Speed (m/s)",
           "shading_entity": "Blinds/Cover Entity (Optional)",
           "is_radiant_heating": "Is this a Radiant Heating System? (Floor/Radiator)",
-          "rh_sensor": "Relative Humidity Sensor (Optional)",
+          "rh_sensor": "Room Relative Humidity Sensor (Optional)",
           "wall_surface_sensor": "Calibration Sensor: Interior Wall Surface Temp (Optional)"
         }
       }
@@ -41,7 +41,7 @@
           "manual_air_speed": "Manual Air Speed (m/s)",
           "shading_entity": "Blinds/Cover Entity (Optional)",
           "is_radiant_heating": "Is this a Radiant Heating System? (Floor/Radiator)",
-          "rh_sensor": "Relative Humidity Sensor (Optional)",
+          "rh_sensor": "Room Relative Humidity Sensor (Optional)",
           "wall_surface_sensor": "Calibration Sensor: Interior Wall Surface Temp (Optional)"
         }
       }
