@@ -10,6 +10,7 @@
           "weather_entity": "Weather Entity",
           "room_profile": "Room Profile",
           "orientation": "Main Window Orientation",
+          "min_update_interval": "Minimum Update Interval (Throttle)",
           "is_radiant_heating": "Is this a Radiant Heating System? (Floor/Radiator)"
         },
         "sections": {
@@ -56,6 +57,7 @@
             "air_temp_source": "Room Air Temperature Sensor",
             "weather_entity": "Weather Entity",
             "orientation": "Main Window Orientation",
+            "min_update_interval": "Minimum Update Interval (Throttle)",
             "is_radiant_heating": "Is this a Radiant Heating System? (Floor/Radiator)"
           },
           "sections": {

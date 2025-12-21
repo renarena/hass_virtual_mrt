@@ -1,3 +1,6 @@
+# 0.2.2
+- Add update throttling by exposing a 'minimum update interval' config/options entry
+  - Saves DB spam but is still responsive 
 # 0.2.1
 - For the ultimate building science nerd: add ISO 7730 / ASHRAE 55 PMV (*Predicted Mean Vote*) and PPD (*Predicted Percentage of Dissatisfied*) thermal comfort indices
   - requires optional room relative humidity sensor input

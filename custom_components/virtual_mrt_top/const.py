@@ -35,6 +35,8 @@ CONF_WALL_SURFACE_SENSOR = "wall_surface_sensor"
 CONF_CLOTHING_INSULATION = "clothing"
 CONF_METABOLISM = "metabolism"
 CUSTOM_PROFILE_KEY = "custom"
+CONF_MIN_UPDATE_INTERVAL = "min_update_interval"
+DEFAULT_MIN_UPDATE_INTERVAL = 30 # Seconds
 
 ORIENTATION_OPTIONS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 

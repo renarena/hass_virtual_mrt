@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 
 from homeassistant.components.sensor import (
     SensorEntity,
@@ -16,7 +17,7 @@ from homeassistant.const import UnitOfTemperature, CONF_NAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.event import async_track_state_change_event, async_call_later
 
 from . import CONF_IS_RADIANT
 from .const import (
@@ -50,6 +51,7 @@ from .const import (
     CONF_OUTDOOR_TEMP_SENSOR,
     CONF_OUTDOOR_HUMIDITY_SENSOR,
     CONF_PRESSURE_SENSOR,
+    CONF_MIN_UPDATE_INTERVAL,
 )
 from .device_info import get_device_info
 
@@ -138,6 +140,10 @@ class VirtualMRTSensor(SensorEntity):
         self.id_hvac_speed = None
         self.id_radiant_type = None
         self.id_radiant_temp = None
+
+        self._min_update_interval = self._config.get(CONF_MIN_UPDATE_INTERVAL, 30.0)
+        self._last_update_time = 0.0
+        self._cancel_scheduled_update = None
 
     @property
     def extra_state_attributes(self):
@@ -240,7 +246,39 @@ class VirtualMRTSensor(SensorEntity):
 
     @callback
     def _handle_update(self, event):
-        """Handle entity state changes."""
+        """Handle entity state changes with Rate Limiting."""
+        now = time.time()
+        time_since = now - self._last_update_time
+
+        # 1. If interval is 0, update instantly (No throttle)
+        if self._min_update_interval <= 0:
+            self._perform_update()
+            return
+
+        # 2. If enough time has passed, update immediately
+        if time_since >= self._min_update_interval:
+            self._perform_update()
+        else:
+            # 3. If too soon, schedule an update for the end of the interval
+            # We cancel any existing timer so we don't stack updates
+            if self._cancel_scheduled_update:
+                self._cancel_scheduled_update()
+                self._cancel_scheduled_update = None
+
+            delay = self._min_update_interval - time_since
+            self._cancel_scheduled_update = async_call_later(
+                self.hass, delay, self._scheduled_update_callback
+            )
+
+    @callback
+    def _scheduled_update_callback(self, _):
+        """Called when the rate-limit timer expires."""
+        self._cancel_scheduled_update = None
+        self._perform_update()
+
+    def _perform_update(self):
+        """Actually run the calc and write state."""
+        self._last_update_time = time.time()
         self._update_calc()
         self.async_write_ha_state()
 

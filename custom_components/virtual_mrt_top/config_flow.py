@@ -34,6 +34,8 @@ from .const import (
     CONF_WALL_SURFACE_SENSOR,
     DEFAULT_AIR_SPEED_STILL,
     CONF_PRESSURE_SENSOR,
+    CONF_MIN_UPDATE_INTERVAL,
+    DEFAULT_MIN_UPDATE_INTERVAL,
 )
 
 
@@ -79,6 +81,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         selector.SelectSelectorConfig(
                             options=ORIENTATION_OPTIONS,
                             mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Required(CONF_MIN_UPDATE_INTERVAL, default=DEFAULT_MIN_UPDATE_INTERVAL): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0, max=300, step=5, unit_of_measurement="seconds",
+                            mode=selector.NumberSelectorMode.BOX
                         )
                     ),
                     vol.Required(
@@ -266,6 +274,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         wind = _get_data("wind_speed_sensor", CONF_WIND_SPEED_SENSOR)
         pressure = _get_data("pressure_sensor", CONF_PRESSURE_SENSOR)
 
+        min_interval = _get_data("min_update_interval", CONF_MIN_UPDATE_INTERVAL, DEFAULT_MIN_UPDATE_INTERVAL)
+
         schema = {
             # --- CORE ---
             vol.Required("air_temp_source", default=air_temp): selector.EntitySelector(
@@ -279,6 +289,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             vol.Required("orientation", default=orientation): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=ORIENTATION_OPTIONS, mode=SelectSelectorMode.DROPDOWN
+                )
+            ),
+            vol.Optional(CONF_MIN_UPDATE_INTERVAL, default=min_interval): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=300, step=5, unit_of_measurement="seconds",
+                    mode=selector.NumberSelectorMode.BOX
                 )
             ),
             vol.Required(
