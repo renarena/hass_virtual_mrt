@@ -27,7 +27,7 @@
           "room_profile": "Room Profile",
           "orientation": "Main Window Orientation",
           "room_area": "Room Floor Area (m²)",
-          "floor_level": "Floor Level (-1=Basement, 0=Ground, 1=Upper)",
+          "floor_level": "Floor Level (-2=BatCave, -1=Basement, 0=Ground, 1=Upper)",
           "min_update_interval": "Minimum Update Interval (Throttle)",
           "is_radiant_heating": "Is this a Radiant Heating System? (Floor/Radiator)"
         },
@@ -43,6 +43,8 @@
               "outdoor_temp_sensor": "Dedicated Outdoor Temp Sensor",
               "outdoor_humidity_sensor": "Dedicated Outdoor Humidity Sensor",
               "wind_speed_sensor": "Dedicated Wind Speed Sensor",
+              "precipitation_sensor": "Precipitation / Rain Rate Sensor",
+              "uv_index_sensor": "UV Index Sensor",
               "pressure_sensor": "Atmospheric Pressure Sensor"
             }
           },
@@ -81,7 +83,7 @@
             "is_radiant_heating": "Is this a Radiant Heating System? (Floor/Radiator)",
             "source_devices": "Which virtual rooms to include in this aggregator?",
             "ceiling_height": "Average Ceiling Height per Floor (m)",
-            "floor_level": "Floor Level (-1=Basement, 0=Ground, 1=Upper)"
+            "floor_level": "Floor Level (-2=BatCave, -1=Basement, 0=Ground, 1=Upper)"
           },
           "sections": {
             "sensors_section": {
@@ -95,6 +97,8 @@
                 "outdoor_temp_sensor": "Dedicated Outdoor Temp Sensor",
                 "outdoor_humidity_sensor": "Dedicated Outdoor Humidity Sensor",
                 "wind_speed_sensor": "Dedicated Wind Speed Sensor",
+                "precipitation_sensor": "Precipitation / Rain Rate Sensor",
+                "uv_index_sensor": "UV Index Sensor",
                 "pressure_sensor": "Atmospheric Pressure Sensor"
               }
             },

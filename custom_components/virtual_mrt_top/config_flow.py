@@ -11,8 +11,6 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.selector import SelectSelectorMode
 
 from .const import (
-    CONF_FLOOR_LEVEL,
-    CONF_CEILING_HEIGHT,
     DOMAIN,
     CONF_ROOM_PROFILE,
     ROOM_PROFILES,
@@ -42,8 +40,12 @@ from .const import (
     TYPE_AGGREGATOR,
     TYPE_ROOM,
     CONF_ROOM_AREA,
+    CONF_CEILING_HEIGHT,
     DEFAULT_CEILING_HEIGHT,
     CONF_CALIBRATION_RH_SENSOR,
+    CONF_PRECIPITATION_SENSOR,
+    CONF_UV_INDEX_SENSOR,
+    CONF_FLOOR_LEVEL,
 )
 
 
@@ -247,6 +249,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                         domain="sensor", device_class="wind_speed"
                                     )
                                 ),
+                                vol.Optional(
+                                    CONF_PRECIPITATION_SENSOR
+                                ): selector.EntitySelector(
+                                    selector.EntitySelectorConfig(
+                                        domain="sensor",
+                                        device_class=["precipitation", "precipitation_intensity"]
+                                    )
+                                ),
+                                vol.Optional(
+                                    CONF_UV_INDEX_SENSOR
+                                ): selector.EntitySelector(
+                                    selector.EntitySelectorConfig(
+                                        domain="sensor"  # UV often has no device class or "voltage" on generic devices
+                                    )
+                                ),
                             }
                         )
                     ),
@@ -420,6 +437,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         out_temp = _get_data("outdoor_temp_sensor", CONF_OUTDOOR_TEMP_SENSOR)
         wind = _get_data("wind_speed_sensor", CONF_WIND_SPEED_SENSOR)
         pressure = _get_data("pressure_sensor", CONF_PRESSURE_SENSOR)
+        precip = _get_data("precipitation_sensor", CONF_PRECIPITATION_SENSOR)
+        uv_idx = _get_data("uv_index_sensor", CONF_UV_INDEX_SENSOR)
 
         min_interval = _get_data(
             "min_update_interval", CONF_MIN_UPDATE_INTERVAL, DEFAULT_MIN_UPDATE_INTERVAL
@@ -531,6 +550,21 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         ): selector.EntitySelector(
                             selector.EntitySelectorConfig(
                                 domain="sensor", device_class="wind_speed"
+                            )
+                        ),
+                        vol.Optional(
+                            CONF_PRECIPITATION_SENSOR, description={"suggested_value": precip}
+                        ): selector.EntitySelector(
+                            selector.EntitySelectorConfig(
+                                domain="sensor",
+                                device_class=["precipitation", "precipitation_intensity"]
+                            )
+                        ),
+                        vol.Optional(
+                            CONF_UV_INDEX_SENSOR, description={"suggested_value": uv_idx}
+                        ): selector.EntitySelector(
+                            selector.EntitySelectorConfig(
+                                domain="sensor"  # UV often has no device class or "voltage" on generic devices
                             )
                         ),
                     }

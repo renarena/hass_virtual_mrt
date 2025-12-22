@@ -61,6 +61,8 @@ from .const import (
     CONF_CEILING_HEIGHT,
     get_device_info,
     CONF_CALIBRATION_RH_SENSOR,
+    CONF_PRECIPITATION_SENSOR,
+    CONF_UV_INDEX_SENSOR,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -136,6 +138,8 @@ class VirtualMRTSensor(SensorEntity):
         self.entity_outdoor_temp = self._config.get(CONF_OUTDOOR_TEMP_SENSOR)
         self.entity_outdoor_hum = self._config.get(CONF_OUTDOOR_HUMIDITY_SENSOR)
         self.entity_wind_speed = self._config.get(CONF_WIND_SPEED_SENSOR)
+        self.entity_rain = self._config.get(CONF_PRECIPITATION_SENSOR)
+        self.entity_uv = self._config.get(CONF_UV_INDEX_SENSOR)
         orient_code = self._config[CONF_ORIENTATION]
         self.orientation_degrees = ORIENTATION_DEGREES.get(orient_code, 180)
         self._radiant_boost_stored = 0.0
@@ -229,6 +233,10 @@ class VirtualMRTSensor(SensorEntity):
             entities_to_track.append(self.entity_outdoor_hum)
         if self.entity_wind_speed:
             entities_to_track.append(self.entity_wind_speed)
+        if self.entity_rain:
+            entities_to_track.append(self.entity_rain)
+        if self.entity_uv:
+            entities_to_track.append(self.entity_uv)
 
         # Add number entities (if found)
         for num_id in [
@@ -673,19 +681,51 @@ class VirtualMRTSensor(SensorEntity):
             cloud_source = "fallback"
         self._attributes["cloud_coverage"] = cloud
         self._attributes["cloud_source"] = cloud_source
-        uv = self._get_attr(self.entity_weather, "uv_index", None)
-        uv_source = "weather_entity"
+        # --- UV Logic ---
+        uv = None
+        uv_source = "fallback"
+
+        # 1. Try Dedicated Sensor
+        if self.entity_uv:
+            uv = self._get_float(self.entity_uv, None)
+            if uv is not None:
+                uv_source = "sensor"
+
+        # 2. Try Weather Entity
+        if uv is None:
+            uv = self._get_attr(self.entity_weather, "uv_index", None)
+            if uv is not None:
+                uv_source = "weather_entity"
+
+        # 3. Fallback
         if uv is None:
             uv = 0.0
-            uv_source = "fallback"
+
         self._attributes["uv_index"] = uv
         self._attributes["uv_source"] = uv_source
-        cond = weather_state_obj.state.lower() if weather_state_obj else ""
-        is_raining = any(x in cond for x in ["rain", "pour", "snow", "hail"])
+
+        # --- RAIN LOGIC ---
+        is_raining = False
+        rain_source = "unknown"
+
+        # 1. Try Dedicated Sensor (Rate > 0)
+        if self.entity_rain:
+            rain_rate = self._get_float(self.entity_rain, None)
+            if rain_rate is not None:
+                is_raining = rain_rate > 0.0
+                rain_source = "sensor"
+
+        # 2. Try Weather Entity State (String match)
+        if rain_source == "unknown":
+            weather_state_obj = self.hass.states.get(self.entity_weather)
+            cond = weather_state_obj.state.lower() if weather_state_obj else ""
+            is_raining = any(x in cond for x in ["rain", "pour", "snow", "hail"])
+            rain_source = "weather_entity_condition_string" if weather_state_obj else "fallback"
+
         rain_mul = 0.4 if is_raining else 1.0
-        rain_source = "weather_entity_condition_string" if is_raining else "dry"
         self._attributes["rain_multiplier"] = rain_mul
         self._attributes["rain_source"] = rain_source
+
         elevation = self._get_attr("sun.sun", "elevation", 0.0)
         day_fac = max(0, min(1, (elevation + 6.0) / 66.0))
         self._attributes["daylight_factor"] = round(day_fac, 3)
@@ -1854,6 +1894,7 @@ class VirtualHeatFluxSensor(VirtualPsychroBase):
         """
         Calculate h_film = h_radiative + h_convective
         Standard ASHRAE 55 / ISO 7730 models.
+        Returns: (h_value, reason_string)
         """
         # 1. Get Air Speed from MRT Sensor (Central Source of Truth)
         v_air = 0.1  # Default Still Air
@@ -1864,16 +1905,18 @@ class VirtualHeatFluxSensor(VirtualPsychroBase):
 
         # 2. Radiative Coefficient (h_r)
         # Linearized estimate for typical room temps (20C) and emissivity (0.9)
-        # h_r = 4 * sigma * eps * T_avg^3
         h_r = 4.7
 
         # 3. Convective Coefficient (h_c)
         # ASHRAE Formula: h_c = 3.1 + 5.6 * v_air^0.6
-        # Note: If v_air < 0.1, we clamp to natural convection baseline
-        effective_v = max(0.1, v_air)
-        h_c = 3.1 + 5.6 * pow(effective_v, 0.6)
+        if v_air <= 0.1:
+            h_c = 3.1  # Baseline for natural convection
+            reason = "Natural Convection (Still Air)"
+        else:
+            h_c = 3.1 + 5.6 * pow(v_air, 0.6)
+            reason = f"Forced Convection (Air Speed: {v_air:.2f} m/s)"
 
-        return h_r + h_c
+        return (h_r + h_c), reason
 
     def _update_value(
         self, t_air, rh, pressure=None
@@ -1901,20 +1944,16 @@ class VirtualHeatFluxSensor(VirtualPsychroBase):
             t_surface = t_air - ((t_air - t_out) * k_loss)
 
         # 3. Calculate Flux
-        # Standard ASHRAE Film Coefficient (h_i) for vertical surfaces = 8.29 W/m²K
-        # h_film = 8.29
-        h_film = self._calculate_dynamic_film_coefficient()
+        h_film, h_reason = self._calculate_dynamic_film_coefficient()
 
         delta_t_surface = t_air - t_surface
 
         # Flux = h * delta_T
-        # We clamp at 0 because walls don't usually generate heat (unless radiant, but that's complex)
         heat_flux = max(0.0, h_film * delta_t_surface)
 
         self._attr_native_value = round(heat_flux, 1)
 
         # 4. Estimate Insulation Quality (R-Value / U-Value)
-        # Only valid if there is a significant temp difference (>5C)
         delta_t_total = t_air - t_out
         if delta_t_total > 5.0 and heat_flux > 0.5:
             # R_total = Delta_T_Total / Flux
@@ -1933,6 +1972,7 @@ class VirtualHeatFluxSensor(VirtualPsychroBase):
         self._attributes["wall_surface_temp"] = round(t_surface, 1)
         self._attributes["outdoor_temp"] = t_out
         self._attributes["film_coefficient_h"] = round(h_film, 2)
+        self._attributes["film_coefficient_type"] = h_reason
 
 
 class VirtualPMVSensor(SensorEntity):

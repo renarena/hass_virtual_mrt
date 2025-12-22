@@ -48,6 +48,8 @@ TYPE_AGGREGATOR = "aggregator"
 CONF_SOURCE_ENTITIES = "source_entities"
 CONF_ROOM_AREA = "room_area"
 DEFAULT_ROOM_AREA = 15.0
+CONF_PRECIPITATION_SENSOR = "precipitation_sensor"
+CONF_UV_INDEX_SENSOR = "uv_index_sensor"
 
 ORIENTATION_OPTIONS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 
