@@ -69,7 +69,7 @@ def _flatten_input(user_input: dict) -> dict:
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Virtual MRT."""
 
-    VERSION = 3
+    VERSION = 4
     MINOR_VERSION = 0
 
     @staticmethod
