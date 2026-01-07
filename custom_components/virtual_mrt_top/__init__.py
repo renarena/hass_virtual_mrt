@@ -26,6 +26,12 @@ from .const import (
     CONF_RADIANT_SURFACE_TEMP,
     CONF_RADIANT_TYPE,
     CONF_IS_RADIANT,
+    CONF_DEVICE_TYPE,
+    TYPE_ROOM,
+    CONF_FLOOR_LEVEL,
+    CONF_CALIBRATION_RH_SENSOR,
+    CONF_PRECIPITATION_SENSOR,
+    CONF_UV_INDEX_SENSOR,
 )
 
 PLATFORMS: list[Platform] = [
@@ -103,6 +109,26 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.info("Migration to version 3 successful for entry %s", entry.entry_id)
         return True
 
+    # Handle V3 -> v4 (Added aggregator flow, user is now a screen to choose adding a room or an aggregator)
+    if entry.version == 3:
+        # need to set some sane defaults?
+        new_data = entry.data.copy() if "new_data" not in locals() else new_data
+        # 1. Backfill Device Type (Old entries are always Rooms)
+        new_data.setdefault(CONF_DEVICE_TYPE, TYPE_ROOM)
+
+        # 2. Backfill Floor Level (Default to 1 / Main Floor)
+        new_data.setdefault(CONF_FLOOR_LEVEL, 1)
+
+        # 3. Backfill New Sensor Keys
+        new_data.setdefault(CONF_CALIBRATION_RH_SENSOR, None)
+        new_data.setdefault(CONF_PRECIPITATION_SENSOR, None)
+        new_data.setdefault(CONF_UV_INDEX_SENSOR, None)
+
+        hass.config_entries.async_update_entry(entry, data=new_data, version=4)
+        _LOGGER.info("Migration to version 4 successful for entry %s", entry.entry_id)
+        return True
+
+
     return True
 
 
@@ -130,6 +156,6 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if not success:
         _LOGGER.error("Failed to clean up persistent data for %s", entry.entry_id)
-        return False
 
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+    return True

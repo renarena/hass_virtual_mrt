@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import List
+
 from homeassistant.components.number import (
     NumberMode,
     RestoreNumber,
@@ -12,6 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import EntityCategory
 
+from . import CONF_IS_RADIANT
 from .const import (
     DOMAIN,
     CONF_ROOM_PROFILE,
@@ -20,8 +23,12 @@ from .const import (
     CONF_MANUAL_AIR_SPEED,
     CONF_HVAC_AIR_SPEED,
     CONF_RADIANT_SURFACE_TEMP,
+    CONF_METABOLISM,
+    CONF_CLOTHING_INSULATION,
+    CONF_DEVICE_TYPE,
+    TYPE_AGGREGATOR,
+    get_device_info,
 )
-from .device_info import get_device_info
 
 
 async def async_setup_entry(
@@ -29,12 +36,19 @@ async def async_setup_entry(
 ):
     """Set up number entities."""
     config = entry.data
-
+    if config.get(CONF_DEVICE_TYPE) == TYPE_AGGREGATOR:
+        return
     # Get the default values from the selected profile
     profile_key = config[CONF_ROOM_PROFILE]
     defaults = ROOM_PROFILES[profile_key]["data"]  # [f_out, f_win, k_loss, k_solar]
     device_info = await get_device_info({(DOMAIN, entry.entry_id)}, config[CONF_NAME])
-    entities = [
+    entities: List[
+        VirtualNumber
+        | VirtualFactorNumber
+        | VirtualThermalAlphaNumber
+        | VirtualSurfaceTargetTempNumber
+        | VirtualAirSpeedNumber
+    ] = [
         VirtualFactorNumber(
             entry,
             device_info,
@@ -84,18 +98,96 @@ async def async_setup_entry(
         VirtualAirSpeedNumber(
             entry, device_info, CONF_HVAC_AIR_SPEED, "hvac_air_speed", 0.4, 0.0, 2.0
         ),
-        VirtualSurfaceTargetTempNumber(
+        VirtualNumber(
             entry,
             device_info,
-            CONF_RADIANT_SURFACE_TEMP,
-            "radiant_surface_temp",
-            26.0,
+            CONF_CLOTHING_INSULATION,
+            "clothing",
+            "mdi:hanger",
+            0.6,
             0.0,
-            85.0,
+            3.0,
+            0.1,
+            "clo",
+        ),
+        VirtualNumber(
+            entry,
+            device_info,
+            CONF_METABOLISM,
+            "metabolism",
+            "mdi:run",
+            1.1,
+            0.8,
+            4.0,
+            0.1,
+            "met",
         ),
     ]
-
+    if config.get(CONF_IS_RADIANT, False):
+        (
+            entities.append(
+                VirtualSurfaceTargetTempNumber(
+                    entry,
+                    device_info,
+                    CONF_RADIANT_SURFACE_TEMP,
+                    "radiant_surface_temp",
+                    26.0,
+                    0.0,
+                    85.0,
+                )
+            ),
+        )
     async_add_entities(entities)
+
+
+class VirtualNumber(RestoreNumber):
+    """Generic number entity for Virtual MRT parameters."""
+
+    _attr_has_entity_name = True
+    _attr_mode = NumberMode.BOX
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(
+        self,
+        entry: ConfigEntry,
+        device_info,
+        key: str,
+        translation_key: str,
+        icon: str,
+        default_val: float,
+        min_val: float,
+        max_val: float,
+        step: float,
+        unit: str | None = None,
+    ):
+        self._key = key
+        self._attr_unique_id = f"{entry.entry_id}_{key}"
+        self.translation_key = translation_key
+        self._attr_device_info = device_info
+        self._icon = icon
+
+        self._default_val = default_val
+        self._attr_native_min_value = min_val
+        self._attr_native_max_value = max_val
+        self._attr_native_step = step
+        self._attr_native_unit_of_measurement = unit
+        self._attr_native_value = default_val
+
+    @property
+    def icon(self) -> str | None:
+        return self._icon
+
+    async def async_added_to_hass(self) -> None:
+        """Restore last state."""
+        await super().async_added_to_hass()
+        last_data = await self.async_get_last_number_data()
+        if last_data is not None:
+            self._attr_native_value = last_data.native_value
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Update the value."""
+        self._attr_native_value = value
+        self.async_write_ha_state()
 
 
 class VirtualFactorNumber(RestoreNumber):
