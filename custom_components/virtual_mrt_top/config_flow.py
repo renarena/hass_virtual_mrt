@@ -47,6 +47,10 @@ from .const import (
     CONF_UV_INDEX_SENSOR,
     CONF_FLOOR_LEVEL,
     CONF_IS_HVAC_ZONE,
+    CONF_EXTERIOR_WALL_AREA,
+    CONF_WINDOW_AREA,
+    CONF_WINDOW_U_VALUE,
+    DEFAULT_WINDOW_U_VALUE,
 )
 
 
@@ -270,6 +274,32 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             }
                         )
                     ),
+                    # --- GEOMETRY WALL/WINDOW ---
+                    vol.Optional("geometry_section"): section(
+                        vol.Schema(
+                            {
+                                vol.Optional(CONF_EXTERIOR_WALL_AREA): selector.NumberSelector(
+                                    selector.NumberSelectorConfig(
+                                        min=0.0, max=100.0, step=0.1, mode=selector.NumberSelectorMode.BOX,
+                                        unit_of_measurement="m²"
+                                    )
+                                ),
+                                vol.Optional(CONF_WINDOW_AREA, default=0.0): selector.NumberSelector(
+                                    selector.NumberSelectorConfig(
+                                        min=0.0, max=50.0, step=0.1, mode=selector.NumberSelectorMode.BOX,
+                                        unit_of_measurement="m²"
+                                    )
+                                ),
+                                vol.Optional(CONF_WINDOW_U_VALUE,
+                                             default=DEFAULT_WINDOW_U_VALUE): selector.NumberSelector(
+                                    selector.NumberSelectorConfig(
+                                        min=0.1, max=10.0, step=0.1, mode=selector.NumberSelectorMode.BOX,
+                                        unit_of_measurement="W/m²K"
+                                    )
+                                ),
+                            }
+                        )
+                    ),
                     # --- SECTION 3: CONVECTION & AIRFLOW ---
                     vol.Optional("convection_section"): section(
                         vol.Schema(
@@ -450,6 +480,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         )
         room_area = _get_data("room_area", CONF_ROOM_AREA, 15.0)
         floor = _get_data("floor_level", CONF_FLOOR_LEVEL, 1)
+        gross_wall = self.config_entry.data.get(CONF_EXTERIOR_WALL_AREA)
+        win_area = self.config_entry.data.get(CONF_WINDOW_AREA, 0.0)
+        win_u = self.config_entry.data.get(CONF_WINDOW_U_VALUE, DEFAULT_WINDOW_U_VALUE)
 
         schema = {
             # --- CORE ---
@@ -570,6 +603,40 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         ): selector.EntitySelector(
                             selector.EntitySelectorConfig(
                                 domain="sensor"  # UV often has no device class or "voltage" on generic devices
+                            )
+                        ),
+                    }
+                )
+            ),
+            # --- SECTION: GEOMETRY WALL/WINDOW ---
+            vol.Optional("geometry_section"): section(
+                vol.Schema(
+                    {
+                        vol.Optional(
+                            CONF_EXTERIOR_WALL_AREA,
+                            description={"suggested_value": gross_wall}
+                        ): selector.NumberSelector(
+                            selector.NumberSelectorConfig(
+                                min=0.0, max=100.0, step=0.1, mode=selector.NumberSelectorMode.BOX,
+                                unit_of_measurement="m²"
+                            )
+                        ),
+                        vol.Optional(
+                            CONF_WINDOW_AREA,
+                            default=win_area
+                        ): selector.NumberSelector(
+                            selector.NumberSelectorConfig(
+                                min=0.0, max=50.0, step=0.1, mode=selector.NumberSelectorMode.BOX,
+                                unit_of_measurement="m²"
+                            )
+                        ),
+                        vol.Optional(
+                            CONF_WINDOW_U_VALUE,
+                            default=win_u
+                        ): selector.NumberSelector(
+                            selector.NumberSelectorConfig(
+                                min=0.1, max=10.0, step=0.1, mode=selector.NumberSelectorMode.BOX,
+                                unit_of_measurement="W/m²K"
                             )
                         ),
                     }

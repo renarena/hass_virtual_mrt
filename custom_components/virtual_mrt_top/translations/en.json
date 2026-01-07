@@ -65,6 +65,15 @@
             "data": {
               "shading_entity": "Blinds/Cover Entity"
             }
+          },
+          "geometry_section": {
+            "name": "Wall & Window Geometry (Advanced Heat Loss)",
+            "description": "Provide actual dimensions for accurate Heat Loss (Watts) calculation. If left blank, Floor Area is used.",
+            "data": {
+              "exterior_wall_area": "Gross Exterior Wall Area (m²) - Include Windows",
+              "window_area": "Total Window/Glass Area (m²)",
+              "window_u_value": "Window U-Value (W/m²K) - Default 2.0 (Double Pane)"
+            }
           }
         }
       }
@@ -119,6 +128,14 @@
               "name": "Advanced & Shading",
               "data": {
                 "shading_entity": "Blinds/Cover Entity"
+              }
+            },
+            "geometry_section": {
+              "name": "Wall & Window Geometry",
+              "data": {
+                "exterior_wall_area": "Gross Exterior Wall Area (m²)",
+                "window_area": "Total Window/Glass Area (m²)",
+                "window_u_value": "Window U-Value (W/m²K)"
               }
             }
           }

@@ -10,7 +10,10 @@ STORE_KEY_CUSTOM = "custom"
 STORE_KEY_SAVED = "saved_profiles"
 
 MAX_SAVED_PROFILES = 100
-
+CONF_EXTERIOR_WALL_AREA = "exterior_wall_area"  # Gross area (Wall + Window)
+CONF_WINDOW_AREA = "window_area"                # Glass area
+CONF_WINDOW_U_VALUE = "window_u_value"          # Insulation metric for glass
+DEFAULT_WINDOW_U_VALUE = 2.0
 CONF_ROOM_PROFILE = "room_profile"
 CONF_ORIENTATION = "orientation"
 CONF_AIR_TEMP_SOURCE = "air_temp_source"

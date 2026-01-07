@@ -64,6 +64,10 @@ from .const import (
     CONF_PRECIPITATION_SENSOR,
     CONF_UV_INDEX_SENSOR,
     CONF_IS_HVAC_ZONE, DEFAULT_ROOM_FLOOR, DEFAULT_ZONE_AREA,
+    CONF_EXTERIOR_WALL_AREA,
+    CONF_WINDOW_AREA,
+    CONF_WINDOW_U_VALUE,
+    DEFAULT_WINDOW_U_VALUE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -107,7 +111,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class VirtualMRTSensor(SensorEntity):
+class VirtualMRTSensorOLD(SensorEntity):
     """Calculates Mean Radiant Temperature."""
 
     _attr_has_entity_name = True
@@ -794,6 +798,8 @@ class VirtualMRTSensor(SensorEntity):
 
         # --- Final Value ---
         self._attr_native_value = round(mrt_final, 2)
+
+
 
 
 class VirtualOperativeTempSensor(SensorEntity):
@@ -1834,6 +1840,10 @@ class VirtualHeatFluxSensor(VirtualPsychroBase):
         self.id_k_loss = None
         self.entity_wall_sensor = entry.data.get(CONF_WALL_SURFACE_SENSOR)
         self.entity_outdoor_temp = entry.data.get(CONF_OUTDOOR_TEMP_SENSOR)
+        self.wall_area_gross = entry.data.get(CONF_EXTERIOR_WALL_AREA)
+        self.window_area = entry.data.get(CONF_WINDOW_AREA, 0.0)
+        self.window_u = entry.data.get(CONF_WINDOW_U_VALUE, DEFAULT_WINDOW_U_VALUE)
+        self.floor_area = entry.data.get(CONF_ROOM_AREA, DEFAULT_ROOM_AREA)
 
     async def async_added_to_hass(self):
         """Register listeners."""
@@ -1906,9 +1916,9 @@ class VirtualHeatFluxSensor(VirtualPsychroBase):
             if w_state:
                 t_out = w_state.attributes.get("temperature")
         if t_out is None:
-            t_out = t_air - 10  # Fail safe default
+            t_out = t_air - 10
 
-        # 2. Determine Wall Surface Temp
+        # 2. Determine Wall Surface Temp (for Opaque Wall)
         t_surface = None
         if self.entity_wall_sensor:
             val = self._get_float_state(self.entity_wall_sensor, None)
@@ -1919,36 +1929,62 @@ class VirtualHeatFluxSensor(VirtualPsychroBase):
             k_loss = self._get_float_state(self.id_k_loss, 0.14)
             t_surface = t_air - ((t_air - t_out) * k_loss)
 
-        # 3. Calculate Flux
+        # 3. Calculate Opaque Wall Flux
         h_film, h_reason = self._calculate_dynamic_film_coefficient()
-
         delta_t_surface = t_air - t_surface
+        heat_flux_wall = max(0.0, h_film * delta_t_surface)
 
-        # Flux = h * delta_T
-        heat_flux = max(0.0, h_film * delta_t_surface)
+        self._attr_native_value = round(heat_flux_wall, 1)
 
-        self._attr_native_value = round(heat_flux, 1)
+        # --- 4. NEW: Calculate Total Watts (Split Method) ---
 
-        # 4. Estimate Insulation Quality (R-Value / U-Value)
-        delta_t_total = t_air - t_out
-        if delta_t_total > 5.0 and heat_flux > 0.5:
-            # R_total = Delta_T_Total / Flux
-            r_si = delta_t_total / heat_flux
+        # Determine Areas
+        if self.wall_area_gross is not None:
+            # User provided specific geometry
+            area_gross = float(self.wall_area_gross)
+            area_win = float(self.window_area)
+            area_opaque = max(0.0, area_gross - area_win)
+            calc_mode = "geometry_inputs"
+        else:
+            # Fallback: Assume Wall Area = Floor Area, No Windows
+            area_opaque = float(self.floor_area)
+            area_win = 0.0
+            calc_mode = "fallback_to_floor_area"
+
+        # A. Opaque Wall Loss (Watts) = Flux * Area
+        loss_opaque = heat_flux_wall * area_opaque
+
+        # B. Window Loss (Watts) = U * Area * DeltaT
+        # Note: We use simple U-value physics here: Q = U * A * (T_in - T_out)
+        delta_t_air_out = max(0.0, t_air - t_out)
+        loss_window = self.window_u * area_win * delta_t_air_out
+
+        total_watts = loss_opaque + loss_window
+
+        # Attributes
+        self._attributes["wall_surface_temp"] = round(t_surface, 1)
+        self._attributes["outdoor_temp"] = t_out
+        self._attributes["film_coefficient_h"] = round(h_film, 2)
+        self._attributes["film_coefficient_type"] = h_reason
+
+        # New Power Attributes
+        self._attributes["total_heat_loss_watts"] = round(total_watts, 1)
+        self._attributes["loss_opaque_watts"] = round(loss_opaque, 1)
+        self._attributes["loss_window_watts"] = round(loss_window, 1)
+        self._attributes["calculation_mode"] = calc_mode
+        self._attributes["area_opaque_m2"] = round(area_opaque, 2)
+        self._attributes["area_window_m2"] = round(area_win, 2)
+
+        # R-Value Estimation (Keep existing logic, applies to opaque wall)
+        if delta_t_air_out > 5.0 and heat_flux_wall > 0.5:
+            r_si = delta_t_air_out / heat_flux_wall
+            r_imperial = r_si * 5.678
             u_val = 1.0 / r_si
-
-            # Conversions
-            r_imperial = r_si * 5.678  # Convert RSI to R-Value (US/Can)
-
             self._attributes["estimated_r_value_imperial"] = round(r_imperial, 1)
             self._attributes["estimated_rsi"] = round(r_si, 2)
             self._attributes["estimated_u_value"] = round(u_val, 3)
         else:
             self._attributes["estimated_r_value_imperial"] = "N/A (Delta T too low)"
-
-        self._attributes["wall_surface_temp"] = round(t_surface, 1)
-        self._attributes["outdoor_temp"] = t_out
-        self._attributes["film_coefficient_h"] = round(h_film, 2)
-        self._attributes["film_coefficient_type"] = h_reason
 
 
 class VirtualPMVSensor(SensorEntity):
@@ -2269,6 +2305,7 @@ class VirtualZoneAggregator(SensorEntity):
             if not entry: continue
             dev_id = entry.device_id
 
+            # Initialize entry if new (use current entity name as placeholder)
             if dev_id not in device_data:
                 name = state_obj.name or entry.original_name or entity_id
                 device_data[dev_id] = {'area': DEFAULT_ROOM_AREA, 'floor': DEFAULT_ROOM_FLOOR, 'name': name}
@@ -2282,45 +2319,61 @@ class VirtualZoneAggregator(SensorEntity):
                 if "outdoor_temp" in state_obj.attributes:
                     t_out = state_obj.attributes["outdoor_temp"]
 
-
             # --- CASE A: Standard Room (Operative Temp) ---
             if entry.translation_key == "operative_temperature":
                 device_data[dev_id]['temp'] = val
                 device_data[dev_id]['area'] = float(state_obj.attributes.get("room_area_m2", DEFAULT_ROOM_AREA))
                 device_data[dev_id]['floor'] = int(state_obj.attributes.get("floor_level", DEFAULT_ROOM_FLOOR))
+                # FIX: Force name to be the Temperature Sensor name (so it doesn't say "Heat Flux")
+                device_data[dev_id]['name'] = state_obj.name
+
+                # Capture Air Temp for Aggregation
+                t_air = self._get_float(state_obj.attributes.get("t_air"))
+                if t_air is not None:
+                    device_data[dev_id]['air_temp'] = t_air
 
             # --- CASE B: Standard Room (Heat Flux) ---
             elif entry.translation_key == "heat_flux":
                 device_data[dev_id]['flux'] = val
+                # NEW: Try to get pre-calculated Total Watts from the sensor attributes
+                precalc_watts = state_obj.attributes.get("total_heat_loss_watts")
+                if precalc_watts is not None:
+                    device_data[dev_id]['watts'] = float(precalc_watts)
 
             # --- CASE C: Nested Aggregator (Zone Temp) ---
             elif entry.translation_key == "zone_temperature":
                 device_data[dev_id]['temp'] = val
                 # Map "Total Zone Area" -> "Area" for weighting
                 device_data[dev_id]['area'] = float(state_obj.attributes.get("total_zone_area_m2", DEFAULT_ZONE_AREA))
+                # FIX: Force name to be the Zone Sensor name
+                device_data[dev_id]['name'] = state_obj.name
 
                 # Map "Total Heat Loss" -> Direct Watts (Pre-calculated by child)
                 device_data[dev_id]['watts'] = float(state_obj.attributes.get("total_heat_loss_watts", 0.0))
 
+                # Capture Air Temp from child aggregator
+                t_air = self._get_float(state_obj.attributes.get("avg_air_temp"))
+                if t_air is not None:
+                    device_data[dev_id]['air_temp'] = t_air
+
                 # Floor Level?
-                # If the child aggregator represents a single floor, it should have 'floor_level'
-                # If mixed, it might be missing. Default to 1 to avoid crash, but maybe exclude from stack?
                 if "floor_level" in state_obj.attributes:
                     device_data[dev_id]['floor'] = int(state_obj.attributes["floor_level"])
-                # (If missing, we just won't be able to plot it in the stack effect calc)
 
         # --- Aggregation Logic ---
         floors = {}
         temps_for_spread = []
         total_area = 0.0
         weighted_temp_sum = 0.0
+        weighted_air_sum = 0.0
+        total_air_area = 0.0
         total_watts_loss = 0.0
         valid_temp_count = 0
 
         for dev_id, data in device_data.items():
             area = data.get('area', DEFAULT_ROOM_AREA)
 
-            # 1. Weighted Temp
+            # 1. Weighted Temp (Operative)
             if 'temp' in data:
                 val = data['temp']
                 weighted_temp_sum += (val * area)
@@ -2336,22 +2389,30 @@ class VirtualZoneAggregator(SensorEntity):
                     if f_lvl not in floors: floors[f_lvl] = []
                     floors[f_lvl].append(val)
 
-            # 2. Watts
+            # 2. Weighted Air Temp
+            if 'air_temp' in data:
+                weighted_air_sum += (data['air_temp'] * area)
+                total_air_area += area
+
+            # 3. Watts
             if 'watts' in data:
                 total_watts_loss += data['watts']
             elif 'flux' in data:
                 total_watts_loss += (data['flux'] * area)
 
-            # --- Output Core Stats ---
+        # --- Output Core Stats ---
         if total_area > 0 and valid_temp_count > 0:
             avg_temp = weighted_temp_sum / total_area
             self._attr_native_value = round(avg_temp, 2)
+            self._attributes["avg_operative_temp"] = round(avg_temp, 2)
             self._attributes["total_zone_area_m2"] = round(total_area, 1)
             self._attributes["total_heat_loss_watts"] = round(total_watts_loss, 0)
             self._attributes["active_sources"] = valid_temp_count
         else:
             self._attr_native_value = None
 
+        if total_air_area > 0:
+            self._attributes["avg_air_temp"] = round(weighted_air_sum / total_air_area, 2)
 
         if t_eff is not None:
             self._attributes["outdoor_temp"] = t_eff
@@ -2384,7 +2445,7 @@ class VirtualZoneAggregator(SensorEntity):
 
             calculate_spread(temps_for_spread)
 
-            # --- MODE B: VERTICAL STACK (Physics Stats) ---
+        # --- MODE B: VERTICAL STACK (Physics Stats) ---
         else:
             self._attributes["aggregator_mode"] = "Vertical Stack / Floor"
 
@@ -2432,4 +2493,718 @@ class VirtualZoneAggregator(SensorEntity):
                     inches_part = 0
                 self._attributes["stack_height_imperial"] = f"{feet_part}' {inches_part}\""
 
+        # FIX: Use thread-safe update scheduler instead of direct write
+        self.schedule_update_ha_state()
+
+
+class VirtualMRTSensor(SensorEntity):
+    """Calculates Mean Radiant Temperature."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_suggested_display_precision = 2
+
+    translation_key = "mrt"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info):
+        self.hass = hass
+        self._entry = entry
+        self._config = entry.data
+
+        self._attr_unique_id = f"{entry.entry_id}_mrt"
+        self._attr_device_info = device_info
+
+        # Inputs
+        self.entity_air = self._config[CONF_AIR_TEMP_SOURCE]
+        self.entity_weather = self._config[CONF_WEATHER_ENTITY]
+        self.entity_solar = self._config.get(CONF_SOLAR_SENSOR)
+        self.entity_climate = self._config.get(CONF_CLIMATE_ENTITY)
+        self.entity_fan = self._config.get(CONF_FAN_ENTITY)
+        self.entity_window = self._config.get(CONF_WINDOW_STATE_SENSOR)
+        self.entity_door = self._config.get(CONF_DOOR_STATE_SENSOR)
+        self.entity_shading = self._config.get(CONF_SHADING_ENTITY)
+        self.entity_wall_sensor = self._config.get(CONF_WALL_SURFACE_SENSOR)
+        self.entity_outdoor_temp = self._config.get(CONF_OUTDOOR_TEMP_SENSOR)
+        self.entity_outdoor_hum = self._config.get(CONF_OUTDOOR_HUMIDITY_SENSOR)
+        self.entity_wind_speed = self._config.get(CONF_WIND_SPEED_SENSOR)
+        self.entity_rain = self._config.get(CONF_PRECIPITATION_SENSOR)
+        self.entity_uv = self._config.get(CONF_UV_INDEX_SENSOR)
+        orient_code = self._config[CONF_ORIENTATION]
+        self.orientation_degrees = ORIENTATION_DEGREES.get(orient_code, 180)
+        self._radiant_boost_stored = 0.0
+        self.is_radiant = self._config.get(CONF_IS_RADIANT, False)
+
+        self._attr_native_value = None
+        self._mrt_prev = None
+        self._attributes = {}
+        self._last_update_time = 0.0
+        self._min_update_interval = 60.0  # Seconds
+
+        # Entity IDs of the number inputs, to be found
+        self.id_f_out = None
+        self.id_f_win = None
+        self.id_k_loss = None
+        self.id_k_solar = None
+        self.id_profile_select = None
+        self.id_thermal_alpha = None
+        self.id_manual_speed = None
+        self.id_hvac_speed = None
+        self.id_radiant_type = None
+        self.id_radiant_temp = None
+
+        self._min_update_interval = self._config.get(CONF_MIN_UPDATE_INTERVAL, 30.0)
+        self._last_update_time = 0.0
+        self._cancel_scheduled_update = None
+
+    @property
+    def extra_state_attributes(self):
+        """Return the state attributes."""
+        return self._attributes
+
+    async def async_added_to_hass(self):
+        """Find number entities and register listeners."""
+        await super().async_added_to_hass()
+
+        # Find the entity IDs of the number controls
+        registry = er.async_get(self.hass)
+        self.id_f_out = registry.async_get_entity_id(
+            "number", DOMAIN, f"{self._entry.entry_id}_f_out"
+        )
+        self.id_f_win = registry.async_get_entity_id(
+            "number", DOMAIN, f"{self._entry.entry_id}_f_win"
+        )
+        self.id_k_loss = registry.async_get_entity_id(
+            "number", DOMAIN, f"{self._entry.entry_id}_k_loss"
+        )
+        self.id_k_solar = registry.async_get_entity_id(
+            "number", DOMAIN, f"{self._entry.entry_id}_k_solar"
+        )
+        self.id_profile_select = registry.async_get_entity_id(
+            "select", DOMAIN, f"{self._entry.entry_id}_profile"
+        )
+        self.id_thermal_alpha = registry.async_get_entity_id(
+            "number", DOMAIN, f"{self._entry.entry_id}_{CONF_THERMAL_ALPHA}"
+        )
+        self.id_manual_speed = registry.async_get_entity_id(
+            "number", DOMAIN, f"{self._entry.entry_id}_{CONF_MANUAL_AIR_SPEED}"
+        )
+        self.id_hvac_speed = registry.async_get_entity_id(
+            "number", DOMAIN, f"{self._entry.entry_id}_{CONF_HVAC_AIR_SPEED}"
+        )
+
+        # Only look for these if radiant heating is enabled
+        if self.is_radiant:
+            self.id_radiant_temp = registry.async_get_entity_id(
+                "number", DOMAIN, f"{self._entry.entry_id}_{CONF_RADIANT_SURFACE_TEMP}"
+            )
+            self.id_radiant_type = registry.async_get_entity_id(
+                "select", DOMAIN, f"{self._entry.entry_id}_{CONF_RADIANT_TYPE}"
+            )
+
+        # Core entities to listen to
+        entities_to_track = [self.entity_air, self.entity_weather, "sun.sun"]
+
+        # Add optional entity IDs (only if configured)
+        if self.entity_wall_sensor:
+            entities_to_track.append(self.entity_wall_sensor)
+        if self.entity_solar:
+            entities_to_track.append(self.entity_solar)
+        if self.entity_climate:
+            entities_to_track.append(self.entity_climate)
+        if self.entity_fan:
+            entities_to_track.append(self.entity_fan)
+        if self.entity_window:
+            entities_to_track.append(self.entity_window)
+        if self.entity_door:
+            entities_to_track.append(self.entity_door)
+        if self.entity_shading:
+            entities_to_track.append(self.entity_shading)
+        if self.entity_outdoor_temp:
+            entities_to_track.append(self.entity_outdoor_temp)
+        if self.entity_outdoor_hum:
+            entities_to_track.append(self.entity_outdoor_hum)
+        if self.entity_wind_speed:
+            entities_to_track.append(self.entity_wind_speed)
+        if self.entity_rain:
+            entities_to_track.append(self.entity_rain)
+        if self.entity_uv:
+            entities_to_track.append(self.entity_uv)
+
+        # Add number entities (if found)
+        for num_id in [
+            self.id_f_out,
+            self.id_f_win,
+            self.id_k_loss,
+            self.id_k_solar,
+            self.id_thermal_alpha,
+            self.id_manual_speed,
+            self.id_hvac_speed,
+            self.id_radiant_temp,
+        ]:
+            if num_id:
+                entities_to_track.append(num_id)
+
+        # Add select entity (if found)
+        if self.id_profile_select:
+            entities_to_track.append(self.id_profile_select)
+        if self.id_radiant_type:
+            entities_to_track.append(self.id_radiant_type)
+
+        self.async_on_remove(
+            async_track_state_change_event(
+                self.hass, entities_to_track, self._handle_update
+            )
+        )
+        self._update_calc()  # Initial update
+
+    @property
+    def icon(self) -> str | None:
+        """Icon of the entity"""
+        return "mdi:home-thermometer"
+
+    @callback
+    def _handle_update(self, event):
+        """Handle entity state changes with Rate Limiting."""
+        now = time.time()
+        time_since = now - self._last_update_time
+
+        # 1. If interval is 0, update instantly (No throttle)
+        if self._min_update_interval <= 0:
+            self._perform_update()
+            return
+
+        # 2. If enough time has passed, update immediately
+        if time_since >= self._min_update_interval:
+            self._perform_update()
+        else:
+            # 3. If too soon, schedule an update for the end of the interval
+            # We cancel any existing timer so we don't stack updates
+            if self._cancel_scheduled_update:
+                self._cancel_scheduled_update()
+                self._cancel_scheduled_update = None
+
+            delay = self._min_update_interval - time_since
+            self._cancel_scheduled_update = async_call_later(
+                self.hass, delay, self._scheduled_update_callback
+            )
+
+    @callback
+    def _scheduled_update_callback(self, _):
+        """Called when the rate-limit timer expires."""
+        self._cancel_scheduled_update = None
+        self._perform_update()
+
+    def _perform_update(self):
+        """Actually run the calc and write state."""
+        self._last_update_time = time.time()
+        self._update_calc()
         self.async_write_ha_state()
+
+    def _get_float(self, entity_id, default=0.0):
+        """Helper to get float from state."""
+        if not entity_id:
+            return default
+        state = self.hass.states.get(entity_id)
+        if not state or state.state in ["unknown", "unavailable"]:
+            return default
+        try:
+            return float(state.state)
+        except ValueError:
+            return default
+
+    def _get_attr(self, entity_id, attr, default=None):
+        """Helper to get attribute."""
+        state = self.hass.states.get(entity_id)
+        if not state:
+            return default
+        val = state.attributes.get(attr)
+        try:
+            return float(val) if val is not None else default
+        except ValueError:
+            return default
+
+    def _get_solar_incidence_factor(self) -> float:
+        """Calculates how directly the sun is shining on the window."""
+        sun_state = self.hass.states.get("sun.sun")
+        if not sun_state:
+            return 0.1  # Fallback to diffuse only
+
+        sun_azimuth = sun_state.attributes.get("azimuth", 180)
+
+        # Calculate difference between Sun and Window
+        diff = abs(sun_azimuth - self.orientation_degrees)
+        if diff > 180:
+            diff = 360 - diff
+
+        # If the sun is more than 90 degrees off-axis, only diffuse (skylight).
+        if diff >= 90:
+            return 0.1
+
+        # Calculate cosine of the angle
+        cosine_factor = math.cos(math.radians(diff))
+
+        # Result is Cosine + Diffuse Baseline (clamped to 1.0 max)
+        return min(1.0, cosine_factor + 0.1)
+
+    def _get_shading_factor(self) -> float:
+        """Calculates solar multiplier based on entity state (0.0 to 1.0)."""
+        if not self.entity_shading:
+            return 1.0
+
+        state_obj = self.hass.states.get(self.entity_shading)
+        if not state_obj or state_obj.state in ["unavailable", "unknown", None]:
+            return 1.0
+
+        domain = state_obj.domain
+        state = state_obj.state
+
+        # --- CASE 1: COVERS ---
+        if domain == "cover":
+            current_pos = state_obj.attributes.get("current_position")
+            if current_pos is not None:
+                try:
+                    return float(current_pos) / 100.0
+                except ValueError:
+                    pass
+            return 0.0 if state == "closed" else 1.0
+
+        # --- CASE 2: NUMBERS / SENSORS ---
+        if domain in ["input_number", "sensor", "number"]:
+            try:
+                val = float(state)
+                if val > 1.0:
+                    return min(1.0, val / 100.0)
+                return max(0.0, val)
+            except ValueError:
+                return 1.0
+
+        # --- CASE 3: BINARY ---
+        if state == "on":
+            return 1.0
+        if state == "off":
+            return 0.0
+
+        return 1.0
+
+    def _calculate_v_air(self) -> float:
+        """Determines the effective air velocity (m/s) based on priority logic."""
+        # Note: This function assumes IDs are valid or None.
+
+        # Read new entity states
+        climate_state = (
+            self.hass.states.get(self.entity_climate) if self.entity_climate else None
+        )
+        window_state = (
+            self.hass.states.get(self.entity_window) if self.entity_window else None
+        )
+        door_state = (
+            self.hass.states.get(self.entity_door) if self.entity_door else None
+        )
+        fan_state = self.hass.states.get(self.entity_fan) if self.entity_fan else None
+
+        # Start with default still air speed
+        potential_speeds = [DEFAULT_AIR_SPEED_STILL]
+
+        # --- Check Manual Override ---
+        manual_speed = self._get_float(self.id_manual_speed, 0.0)
+        if manual_speed > 0:
+            potential_speeds.append(manual_speed)
+
+        # --- Check Natural Ventilation ---
+        if window_state and window_state.state.lower() == "on":
+            potential_speeds.append(DEFAULT_AIR_SPEED_WINDOW)
+
+        if door_state and door_state.state.lower() == "on":
+            potential_speeds.append(DEFAULT_AIR_SPEED_DOOR)
+
+        # --- Check HVAC (Forced Air) ---
+        hvac_speed_setting = self._get_float(self.id_hvac_speed, DEFAULT_AIR_SPEED_HVAC)
+        if not self.is_radiant:
+            if climate_state:
+                attrs = climate_state.attributes
+                is_active = attrs.get("hvac_action") not in ["off", "idle", None]
+                is_fan_forced = attrs.get("fan_mode") == "on"
+
+                if is_active or is_fan_forced:
+                    potential_speeds.append(hvac_speed_setting)
+
+        # --- Check Local Fan Entity ---
+        if fan_state and fan_state.state not in ["off", "unavailable", "unknown", None]:
+            fan_speed_key = str(fan_state.state).lower()
+            fan_speed = FAN_SPEED_MAP.get(fan_speed_key, hvac_speed_setting)
+            potential_speeds.append(fan_speed)
+
+        return max(potential_speeds)
+
+    def _calculate_local_apparent_temp(
+            self, t_out: float, wind_ms: float
+    ) -> float | None:
+        """
+        Calculates Apparent Temperature (AAT) using local sensors.
+        Formula covers both Wind Chill and Humidity effects.
+        AT = Ta + 0.33*e - 0.70*ws - 4.00
+        """
+        # 1. Get Outdoor Humidity (Local > Weather > Fail)
+        rh_out = self._get_float(self.entity_outdoor_hum, None)
+        if rh_out is None:
+            w_state = self.hass.states.get(self.entity_weather)
+            if w_state:
+                rh_out = w_state.attributes.get("humidity")
+
+        if rh_out is None:
+            return None  # Cannot calculate without humidity
+
+        # 2. Calculate Vapor Pressure (hPa)
+        # Use the static helper from Psychrometrics
+        vp_sat = Psychrometrics.calculate_vapor_pressure(t_out)
+        vp_actual = vp_sat * (rh_out / 100.0)
+
+        # 3. Apply AAT Formula
+        # Note: wind_ms is raw here; in strict meteorology it's avg'd, but raw is fine.
+        app_temp = t_out + (0.33 * vp_actual) - (0.70 * wind_ms) - 4.00
+
+        return app_temp
+
+    def _update_calc(self):
+        """Perform the math and store all intermediate values."""
+
+        # --- 1. ROBUST ENTITY CHECK ---
+        # We must verify that ALL required internal entity IDs have been found
+        # before we attempt to read their states.
+
+        # Start with common entities
+        required_ids = [
+            self.id_f_out,
+            self.id_f_win,
+            self.id_k_loss,
+            self.id_k_solar,
+            self.id_profile_select,
+            self.id_thermal_alpha,
+            self.id_manual_speed,
+            self.id_hvac_speed,
+        ]
+
+        # Conditional Check: Only require Radiant IDs if radiant is enabled
+        if self.is_radiant:
+            required_ids.append(self.id_radiant_temp)
+            required_ids.append(self.id_radiant_type)
+
+        if not all(required_ids):
+            _LOGGER.debug("Entities not yet registered, trying to find them...")
+            registry = er.async_get(self.hass)
+
+            # Try to populate missing IDs
+            if not self.id_f_out:
+                self.id_f_out = registry.async_get_entity_id(
+                    "number", DOMAIN, f"{self._entry.entry_id}_f_out"
+                )
+            if not self.id_f_win:
+                self.id_f_win = registry.async_get_entity_id(
+                    "number", DOMAIN, f"{self._entry.entry_id}_f_win"
+                )
+            if not self.id_k_loss:
+                self.id_k_loss = registry.async_get_entity_id(
+                    "number", DOMAIN, f"{self._entry.entry_id}_k_loss"
+                )
+            if not self.id_k_solar:
+                self.id_k_solar = registry.async_get_entity_id(
+                    "number", DOMAIN, f"{self._entry.entry_id}_k_solar"
+                )
+            if not self.id_profile_select:
+                self.id_profile_select = registry.async_get_entity_id(
+                    "select", DOMAIN, f"{self._entry.entry_id}_profile"
+                )
+            if not self.id_thermal_alpha:
+                self.id_thermal_alpha = registry.async_get_entity_id(
+                    "number", DOMAIN, f"{self._entry.entry_id}_{CONF_THERMAL_ALPHA}"
+                )
+            if not self.id_manual_speed:
+                self.id_manual_speed = registry.async_get_entity_id(
+                    "number", DOMAIN, f"{self._entry.entry_id}_{CONF_MANUAL_AIR_SPEED}"
+                )
+            if not self.id_hvac_speed:
+                self.id_hvac_speed = registry.async_get_entity_id(
+                    "number", DOMAIN, f"{self._entry.entry_id}_{CONF_HVAC_AIR_SPEED}"
+                )
+
+            # Populate Radiant IDs if needed
+            if self.is_radiant:
+                if not self.id_radiant_temp:
+                    self.id_radiant_temp = registry.async_get_entity_id(
+                        "number",
+                        DOMAIN,
+                        f"{self._entry.entry_id}_{CONF_RADIANT_SURFACE_TEMP}",
+                    )
+                if not self.id_radiant_type:
+                    self.id_radiant_type = registry.async_get_entity_id(
+                        "select", DOMAIN, f"{self._entry.entry_id}_{CONF_RADIANT_TYPE}"
+                    )
+
+            # Re-check. If still missing, we cannot proceed.
+            # We must use 'required_ids' check again with updated values
+
+            # Rebuild check list
+            check_list = [
+                self.id_f_out,
+                self.id_f_win,
+                self.id_k_loss,
+                self.id_k_solar,
+                self.id_profile_select,
+                self.id_thermal_alpha,
+                self.id_manual_speed,
+                self.id_hvac_speed,
+            ]
+            if self.is_radiant:
+                check_list.append(self.id_radiant_temp)
+                check_list.append(self.id_radiant_type)
+
+            if not all(check_list):
+                _LOGGER.debug(
+                    "Could not find all required entities for %s, calculation will be delayed.",
+                    self.entity_id,
+                )
+                return
+
+        # --- Start fresh on attributes
+        self._attributes = {}
+
+        # --- Calculate Air Speed (v_air) ---
+        v_air = self._calculate_v_air()
+        self._attributes["air_speed_ms_convective"] = round(v_air, 2)
+
+        # --- Profile Info ---
+        profile_key = self._config[CONF_ROOM_PROFILE]
+        if self.id_profile_select:
+            profile_state = self.hass.states.get(self.id_profile_select)
+            if profile_state and profile_state.state not in ["unknown", "unavailable"]:
+                profile_key = profile_state.state
+        self._attributes["profile"] = profile_key
+        self._attributes["orientation"] = self._config[CONF_ORIENTATION]
+
+        # --- T_air (Input) ---
+        t_air = self._get_float(self.entity_air, None)
+        if t_air is None:
+            return
+        self._attributes["t_air"] = t_air
+
+        # --- T_out (Input) ---
+        t_out = self._get_float(self.entity_outdoor_temp, None)
+        if t_out is None:
+            t_out = self._get_attr(self.entity_weather, "temperature")
+        if t_out is None:
+            # If we have absolutely no data, we can't run the physics model safely.
+            return
+
+        # --- Wind (Input) ---
+        wind_speed_ms = self._get_float(self.entity_wind_speed, None)
+        if wind_speed_ms is None:
+            wind_speed_ms = self._get_attr(self.entity_weather, "wind_speed", 0.0)
+        weather_state_obj = self.hass.states.get(self.entity_weather)
+        if (
+                weather_state_obj
+                and weather_state_obj.attributes.get("wind_speed_unit") == "km/h"
+        ):
+            wind_speed_ms = wind_speed_ms / 3.6
+        wind_speed_kmh = wind_speed_ms * 3.6
+        self._attributes["wind_ms"] = round(wind_speed_ms, 2)
+        self._attributes["wind_kmh"] = round(wind_speed_kmh, 2)
+        self._attributes["wind_source"] = "weather_entity"
+
+        # We want the "Feels Like" temp because that drives heat loss better than dry bulb.
+        # Try to calculate locally first (Most Accurate)
+        t_app = self._calculate_local_apparent_temp(t_out, wind_speed_ms)
+        t_out_source = "calculated_local_aat"
+
+        if t_app is None:
+            # Fallback to weather entity attribute
+            t_app = self._get_attr(self.entity_weather, "apparent_temperature")
+            t_out_source = "weather_entity_attr"
+
+        # Use the lower of the two (Conservative for heating: Wind Chill matters)
+        # If T_app is missing, just use T_out
+        if t_app is not None and t_app < t_out:
+            t_out_eff = t_app
+        else:
+            t_out_eff = t_out
+            t_out_source = "dry_bulb_clamped"
+
+        self._attributes["t_out_eff"] = round(t_out_eff, 2)
+        self._attributes["t_out_eff_source"] = t_out_source
+
+        # --- Dynamic Factors (Inputs) ---
+        config_profile_key = self._config[CONF_ROOM_PROFILE]
+        defaults = ROOM_PROFILES[config_profile_key]["data"]
+        f_out = self._get_float(self.id_f_out, defaults[0])
+        f_win = self._get_float(self.id_f_win, defaults[1])
+        k_loss = self._get_float(self.id_k_loss, defaults[2])
+        k_solar = self._get_float(self.id_k_solar, defaults[3])
+        alpha = self._get_float(self.id_thermal_alpha, 0.3)
+        self._attributes["factor_f_out"] = f_out
+        self._attributes["factor_f_win"] = f_win
+        self._attributes["factor_k_loss"] = k_loss
+        self._attributes["factor_k_solar"] = k_solar
+        self._attributes["thermal_alpha"] = alpha
+
+        # --- Clouds/UV/Rain (Inputs) ---
+        cloud = self._get_attr(self.entity_weather, "cloud_coverage", None)
+        cloud_source = "weather_entity"
+        if cloud is None:
+            cloud = 50.0
+            cloud_source = "fallback"
+        self._attributes["cloud_coverage"] = cloud
+        self._attributes["cloud_source"] = cloud_source
+        # --- UV Logic ---
+        uv = None
+        uv_source = "fallback"
+
+        # 1. Try Dedicated Sensor
+        if self.entity_uv:
+            uv = self._get_float(self.entity_uv, None)
+            if uv is not None:
+                uv_source = "sensor"
+
+        # 2. Try Weather Entity
+        if uv is None:
+            uv = self._get_attr(self.entity_weather, "uv_index", None)
+            if uv is not None:
+                uv_source = "weather_entity"
+
+        # 3. Fallback
+        if uv is None:
+            uv = 0.0
+
+        self._attributes["uv_index"] = uv
+        self._attributes["uv_source"] = uv_source
+
+        # --- RAIN LOGIC ---
+        is_raining = False
+        rain_source = "unknown"
+
+        # 1. Try Dedicated Sensor (Rate > 0)
+        if self.entity_rain:
+            rain_rate = self._get_float(self.entity_rain, None)
+            if rain_rate is not None:
+                is_raining = rain_rate > 0.0
+                rain_source = "sensor"
+
+        # 2. Try Weather Entity State (String match)
+        if rain_source == "unknown":
+            weather_state_obj = self.hass.states.get(self.entity_weather)
+            cond = weather_state_obj.state.lower() if weather_state_obj else ""
+            is_raining = any(x in cond for x in ["rain", "pour", "snow", "hail"])
+            rain_source = "weather_entity_condition_string" if weather_state_obj else "fallback"
+
+        rain_mul = 0.4 if is_raining else 1.0
+        self._attributes["rain_multiplier"] = rain_mul
+        self._attributes["rain_source"] = rain_source
+
+        elevation = self._get_attr("sun.sun", "elevation", 0.0)
+        day_fac = max(0, min(1, (elevation + 6.0) / 66.0))
+        self._attributes["daylight_factor"] = round(day_fac, 3)
+
+        # --- Radiation (Calc) ---
+        rad_source = "heuristic"
+        rad_val = 0.0
+        if self.entity_solar:
+            rad = self._get_float(self.entity_solar, None)
+            if rad is not None:
+                rad_source = "sensor"
+                rad_val = rad
+                if rad_val > 1300:
+                    _LOGGER.warning(
+                        "Solar sensor value (%s W/m²) exceeds physical maximum. Using reported value.",
+                        rad_val,
+                    )
+        if rad_source != "sensor":
+            cloud_factor = max(0, 1 - (0.9 * (cloud / 100.0)))
+            base = (90 * uv) if uv > 0 else (100 * day_fac)
+            est = base * cloud_factor * rain_mul * day_fac
+            rad_val = min(1000, est)
+            rad_source = "heuristic"
+        rad_final = max(0.0, rad_val)
+        self._attributes["radiation"] = round(rad_final, 1)
+        self._attributes["radiation_source"] = rad_source
+
+        # --- Shading Factor ---
+        shading_factor = self._get_shading_factor()
+        self._attributes["shading_factor"] = round(shading_factor, 2)
+
+        # --- CALCULATE RADIANT BOOST ---
+        new_boost = 0.0
+        if self.is_radiant:
+            surface_setpoint = self._get_float(self.id_radiant_temp, 24.0)
+
+            # Get type safely
+            type_key = "high_mass"
+            if self.id_radiant_type:
+                type_state = self.hass.states.get(self.id_radiant_type)
+                if type_state:
+                    type_key = type_state.state
+
+            system_props = RADIANT_TYPES.get(type_key, RADIANT_TYPES["high_mass"])
+            boost_alpha = system_props["alpha"]
+            view_factor = system_props["view_factor"]
+
+            climate_state = (
+                self.hass.states.get(self.entity_climate) if self.entity_climate else None
+            )
+            target_boost = 0.0
+            if (
+                    climate_state
+                    and climate_state.attributes.get("hvac_action") == "heating"
+            ):
+                delta_t = surface_setpoint - t_air
+                target_boost = delta_t * view_factor
+
+            new_boost = ((1.0 - boost_alpha) * self._radiant_boost_stored) + (
+                    boost_alpha * target_boost
+            )
+            self._radiant_boost_stored = new_boost
+
+        self._attributes["radiant_boost_current"] = round(new_boost, 2)
+
+        # --- Incidence Factor ---
+        incidence_factor = self._get_solar_incidence_factor()
+        self._attributes["solar_incidence_factor"] = round(incidence_factor, 2)
+
+        # --- MRT Calculation ---
+        term_loss = (
+                k_loss
+                * (t_air - t_out_eff)
+                * (f_out + 1.5 * f_win)
+                * (1 + 0.02 * wind_speed_ms)
+        )
+        term_solar = (
+                k_solar * (rad_final / 400.0) * incidence_factor * f_win * shading_factor
+        )
+        mrt_calc = t_air - term_loss + term_solar + new_boost
+
+        self._attributes["loss_term"] = round(term_loss, 3)
+        self._attributes["solar_term"] = round(term_solar, 3)
+        self._attributes["mrt_unclamped"] = round(mrt_calc, 2)
+
+        # --- Estimated Wall Surface Temp ---
+        # Theoretical inner surface temp of the exterior wall
+        # T_surf = T_air - (Delta_T * k_loss)
+        # We use t_out_eff to account for wind chill cooling the exterior
+        if t_air is not None and t_out_eff is not None:
+            t_wall_est = t_air - ((t_air - t_out_eff) * k_loss)
+            self._attributes["estimated_wall_surface_temp"] = round(t_wall_est, 1)
+
+        # --- Clamping ---
+        lower_dyn = max(t_out_eff + 2.0, t_air - 3.0)
+        upper_dyn = t_air + 4.0
+        mrt_clamped = max(lower_dyn, min(mrt_calc, upper_dyn))
+        self._attributes["mrt_clamped"] = round(mrt_clamped, 2)
+
+        # --- Smoothing ---
+        if self._mrt_prev is None:
+            self._mrt_prev = mrt_clamped
+
+        mrt_final = ((1.0 - alpha) * self._mrt_prev) + (alpha * mrt_clamped)
+        self._mrt_prev = mrt_final
+
+        # --- Final Value ---
+        self._attr_native_value = round(mrt_final, 2)

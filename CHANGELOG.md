@@ -1,3 +1,10 @@
+# 0.2.3 - Geometry and Windows
+- Add new **advanced** inputs to calculate realistic **aggregator** heat loss and enhance **room** mold risk by estimating window surface temperature.
+  - current calc uses floor area as the exterior wall area and assumes the whole wall has no windows  
+  - new inputs:
+    - gross room exterior wall area (walls and windows)
+    - window area (window area)
+    - window U-value (default 2.0; double pane)
 # 0.2.3
 - add an aggregator 'mode'
   - there will be 'floor' and 'hvac_zone' aggregators
