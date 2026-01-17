@@ -2,6 +2,23 @@
   "config": {
     "step": {
       "user": {
+        "title": "Select Configuration Type",
+        "menu_options": {
+          "room_setup": "Add a Virtual Room (MRT/T_op)",
+          "aggregator_setup": "Add an Aggregator (Virtual Floor/Whole House/HVAC Zone)"
+        }
+      },
+      "aggregator_setup": {
+        "title": "Configure Aggregator",
+        "description": "Set up a device aggregator to create a new virtual floor, whole house or hvac zone device based on existing Virtual MRT/T_op rooms.",
+        "data": {
+          "name": "Aggregator Name (Floor / Whole House, Zone)",
+          "source_devices": "Which virtual rooms to include in this aggregator?",
+          "is_hvac_zone": "Is this an HVAC Zone? (Enables Balancing Stats, Disables Stack Effect)",
+          "ceiling_height": "Average Ceiling Height per Floor (m)"
+        }
+      },
+      "room_setup": {
         "title": "Set up Virtual MRT/T_op Room",
         "description": "Enter the details of the room to calculate Mean Radiant Temperature and Operative Temperature.",
         "data": {
@@ -10,42 +27,120 @@
           "weather_entity": "Weather Entity",
           "room_profile": "Room Profile",
           "orientation": "Main Window Orientation",
-          "solar_sensor": "Solar Irradiation Sensor (Optional)",
-          "climate_entity": "HVAC Climate/Thermostat Entity (Optional)",
-          "fan_entity": "Local Fan/Ceiling Fan Entity (Optional)",
-          "window_state_sensor": "Window Open Binary Sensor (Optional)",
-          "door_state_sensor": "Door Open Binary Sensor (Optional)",
-          "manual_air_speed": "Manual Air Speed (m/s)",
-          "shading_entity": "Blinds/Cover Entity (Optional)",
-          "is_radiant_heating": "Is this a Radiant Heating System? (Floor/Radiator)",
-          "rh_sensor": "Room Relative Humidity Sensor (Optional)",
-          "wall_surface_sensor": "Calibration Sensor: Interior Wall Surface Temp (Optional)"
+          "room_area": "Room Floor Area (m²)",
+          "floor_level": "Floor Level (-2=BatCave, -1=Basement, 0=Ground, 1=Upper)",
+          "min_update_interval": "Minimum Update Interval (Throttle)",
+          "is_radiant_heating": "Is this a Radiant Heating System? (Floor/Radiator)"
+        },
+        "sections": {
+          "sensors_section": {
+            "name": "Optional Environmental Sensors",
+            "description": "Connect external sensors for higher accuracy.",
+            "data": {
+              "solar_sensor": "Global Horizontal [Solar] Irradiation (GHI) Sensor",
+              "rh_sensor": "Room Relative Humidity Sensor",
+              "wall_surface_sensor": "Calibration Sensor: Interior Wall Surface Temp",
+              "calibration_rh_sensor": "Calibration Sensor: Interior Wall Surface Humidity",
+              "outdoor_temp_sensor": "Dedicated Outdoor Temp Sensor",
+              "outdoor_humidity_sensor": "Dedicated Outdoor Humidity Sensor",
+              "wind_speed_sensor": "Dedicated Wind Speed Sensor",
+              "precipitation_sensor": "Precipitation / Rain Rate Sensor",
+              "uv_index_sensor": "UV Index Sensor",
+              "pressure_sensor": "Atmospheric Pressure Sensor"
+            }
+          },
+          "convection_section": {
+            "name": "Airflow & Convection Factors",
+            "description": "Configure how air movement affects comfort.",
+            "data": {
+              "climate_entity": "HVAC Climate/Thermostat Entity",
+              "fan_entity": "Local Fan/Ceiling Fan Entity",
+              "window_state_sensor": "Window Open Binary Sensor",
+              "door_state_sensor": "Door Open Binary Sensor",
+              "manual_air_speed": "Manual Air Speed (m/s)"
+            }
+          },
+          "advanced_section": {
+            "name": "Advanced & Shading",
+            "data": {
+              "shading_entity": "Blinds/Cover Entity"
+            }
+          },
+          "geometry_section": {
+            "name": "Wall & Window Geometry (Advanced Heat Loss)",
+            "description": "Provide actual dimensions for accurate Heat Loss (Watts) calculation. If left blank, Floor Area is used.",
+            "data": {
+              "exterior_wall_area": "Gross Exterior Wall Area (m²) - Include Windows",
+              "window_area": "Total Window/Glass Area (m²)",
+              "window_u_value": "Window U-Value (W/m²K) - Default 2.0 (Double Pane)"
+            }
+          }
         }
       }
     }
   },
   "options": {
-    "step": {
-      "init": {
-        "title": "Configure Virtual MRT/T_op",
-        "description": "Adjust core settings of the room.",
-        "data": {
-          "air_temp_source": "Room Air Temperature Sensor",
-          "weather_entity": "Weather Entity",
-          "orientation": "Main Window Orientation",
-          "solar_sensor": "Solar Irradiation Sensor (Optional)",
-          "climate_entity": "HVAC Climate/Thermostat Entity (Optional)",
-          "fan_entity": "Local Fan/Ceiling Fan Entity (Optional)",
-          "window_state_sensor": "Window Open Binary Sensor (Optional)",
-          "door_state_sensor": "Door Open Binary Sensor (Optional)",
-          "manual_air_speed": "Manual Air Speed (m/s)",
-          "shading_entity": "Blinds/Cover Entity (Optional)",
-          "is_radiant_heating": "Is this a Radiant Heating System? (Floor/Radiator)",
-          "rh_sensor": "Room Relative Humidity Sensor (Optional)",
-          "wall_surface_sensor": "Calibration Sensor: Interior Wall Surface Temp (Optional)"
+      "step": {
+        "init": {
+          "title": "Configure Virtual MRT/T_op",
+          "description": "Adjust core settings of the room.",
+          "data": {
+            "air_temp_source": "Room Air Temperature Sensor",
+            "weather_entity": "Weather Entity",
+            "orientation": "Main Window Orientation",
+            "room_area": "Room Floor Area (m²)",
+            "min_update_interval": "Minimum Update Interval (Throttle)",
+            "is_radiant_heating": "Is this a Radiant Heating System? (Floor/Radiator)",
+            "source_devices": "Which virtual rooms to include in this aggregator?",
+            "ceiling_height": "Average Ceiling Height per Floor (m)",
+            "is_hvac_zone": "Is this an HVAC Zone? (Enables Balancing Stats, Disables Stack Effect)",
+            "floor_level": "Floor Level (-2=BatCave, -1=Basement, 0=Ground, 1=Upper)"
+          },
+          "sections": {
+            "sensors_section": {
+              "name": "Optional Environmental Sensors",
+              "description": "Connect external sensors for higher accuracy.",
+              "data": {
+                "solar_sensor": "Global Horizontal [Solar] Irradiation (GHI) Sensor",
+                "rh_sensor": "Room Relative Humidity Sensor",
+                "wall_surface_sensor": "Calibration Sensor: Interior Wall Surface Temp",
+                "calibration_rh_sensor": "Calibration Sensor: Interior Wall Surface Humidity",
+                "outdoor_temp_sensor": "Dedicated Outdoor Temp Sensor",
+                "outdoor_humidity_sensor": "Dedicated Outdoor Humidity Sensor",
+                "wind_speed_sensor": "Dedicated Wind Speed Sensor",
+                "precipitation_sensor": "Precipitation / Rain Rate Sensor",
+                "uv_index_sensor": "UV Index Sensor",
+                "pressure_sensor": "Atmospheric Pressure Sensor"
+              }
+            },
+            "convection_section": {
+              "name": "Airflow & Convection Factors",
+              "description": "Configure how air movement affects comfort.",
+              "data": {
+                "climate_entity": "HVAC Climate/Thermostat Entity",
+                "fan_entity": "Local Fan/Ceiling Fan Entity",
+                "window_state_sensor": "Window Open Binary Sensor",
+                "door_state_sensor": "Door Open Binary Sensor",
+                "manual_air_speed": "Manual Air Speed (m/s)"
+              }
+            },
+            "advanced_section": {
+              "name": "Advanced & Shading",
+              "data": {
+                "shading_entity": "Blinds/Cover Entity"
+              }
+            },
+            "geometry_section": {
+              "name": "Wall & Window Geometry",
+              "data": {
+                "exterior_wall_area": "Gross Exterior Wall Area (m²)",
+                "window_area": "Total Window/Glass Area (m²)",
+                "window_u_value": "Window U-Value (W/m²K)"
+              }
+            }
+          }
         }
       }
-    }
   },
   "selector": {
     "room_profile": {
@@ -82,7 +177,18 @@
       "humidex": { "name": "Humidex" },
       "perception": { "name": "Thermal Perception" },
       "mold_risk": { "name": "Mold Risk (Critical Surface)" },
-      "calibration_k": { "name": "Estimated Insulation Factor" }
+      "calibration_k": { "name": "Estimated Insulation Factor" },
+      "heat_flux": { "name": "Wall Heat Loss Flux" },
+      "pmv": { "name": "Thermal Comfort (PMV)" },
+      "zone_temperature": {
+        "name": "Zone Temperature"
+      },
+      "moisture_excess": {
+        "name": "Moisture Excess",
+        "state_attributes": {
+            "status": { "name": "Load Status" }
+        }
+      }
     },
     "number": {
       "exterior_envelope_ratio": {
@@ -109,6 +215,12 @@
       },
       "manual_air_speed": {
         "name": "Manual Air Speed"
+      },
+      "clothing": {
+        "name": "Clothing Level (clo)"
+      },
+      "metabolism": {
+        "name": "Metabolic Rate (met)"
       }
     },
     "select": {
