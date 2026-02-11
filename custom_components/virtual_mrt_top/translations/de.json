@@ -51,7 +51,7 @@
           },
           "convection_section": {
             "name": "Luftbewegung & Konvektion",
-            "description": "Einstellungen, die Luftbewegungen den Komfort beeinflussen.",
+            "description": "Einstellungen, wie Luftbewegungen den Komfort beeinflussen.",
             "data": {
               "climate_entity": "Klima/Thermostat",
               "fan_entity": "Lokaler Lüfter/Deckenlüfter",
